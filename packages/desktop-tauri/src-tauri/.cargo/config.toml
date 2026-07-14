@@ -1,0 +1,14 @@
+# The patched specta git rev (see ../Cargo.toml [patch]) enables `impl Type for
+# f16/f128` under cfg(is_nightly) but does NOT declare the corresponding crate
+# features, so it fails to compile on any normal nightly. Inject the feature
+# attributes for the whole build graph here so `cargo`/`tauri` builds work
+# without editing the vendored specta source. RUSTC_BOOTSTRAP=1 lets the
+# attributes apply on the pinned toolchain.
+#
+# KBD: tauri-electron-feature-parity — unblocks all Rust changes. Remove if the
+# specta patch is dropped or the upstream rev fixes its feature declarations.
+[build]
+rustflags = ["-Zcrate-attr=feature(f16)", "-Zcrate-attr=feature(f128)"]
+
+[env]
+RUSTC_BOOTSTRAP = "1"
