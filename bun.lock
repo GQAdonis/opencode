@@ -512,6 +512,22 @@
         "vite": "catalog:",
       },
     },
+    "packages/fork-plugins": {
+      "name": "@opencode-fork/plugins",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode-ai/plugin": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/schema": "workspace:*",
+        "@tsconfig/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/function": {
       "name": "@opencode-ai/function",
       "version": "1.17.20",
@@ -2239,6 +2255,8 @@
     "@opencode-ai/web": ["@opencode-ai/web@workspace:packages/web"],
 
     "@opencode-ai/www": ["@opencode-ai/www@workspace:packages/www"],
+
+    "@opencode-fork/plugins": ["@opencode-fork/plugins@workspace:packages/fork-plugins"],
 
     "@openrouter/ai-sdk-provider": ["@openrouter/ai-sdk-provider@2.9.0", "", { "peerDependencies": { "ai": "^6.0.0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-Seva+NCa0WUQnJIUE5GzHsUv1WTIeyqwz0ELl2VtS6NP+eF+77yCXGFVOMbvoCM7QMjlnhv7931e89R+8pJdcQ=="],
 

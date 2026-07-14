@@ -1,0 +1,23 @@
+{
+  "phase": "v2-architecture-alignment",
+  "status": "planned",
+  "updatedAt": "2026-07-14",
+  "branch": "v2",
+  "base": "upstream/v2@aa8fc4234d",
+  "change_backend": "openspec",
+  "next_action": "/kbd-apply change-001 — spike to validate v2 behavior gaps (BLOCKING)",
+  "next_change": "change-001",
+  "implementationCompleted": 0,
+  "implementationTotal": 8,
+  "previousPhase": "upstream-merge-2026-07-03",
+  "decisions": {
+    "governing_constraint": "zero permanent core divergence; core edits only as upstreamable contributions",
+    "v2_branch": "upstream/v2 is the real 2.0 line — upstream/2.0 is a dead 2026-04 exploration branch, upstream/beta is the 1.17.x channel",
+    "v1_tree_frozen": "packages/opencode is V1 reference-only (AGENTS.md:4). No changes land there. Original 19-file patch-port abandoned.",
+    "blocker_found": "session.hook(\"request\") is documented (v2.opencode.ai + plugin READMEs) but NOT implemented — core/src/plugin/hooks.ts exposes only aisdk + tool domains. Plugins cannot rank or truncate the skill list.",
+    "corrections": [
+      "packages/app churn was measured from the wrong baseline: real dev->v2 delta is +2397/-2367, not +28920. Electron desktop is +17/-3, platform.tsx byte-identical. v2 is a backend rewrite, not a frontend rewrite.",
+      "Loop cap, terminal errors, and skills.exclude are all solvable with ZERO core edits (agent config/plugin, native retry taxonomy, permission rules)."
+    ]
+  }
+}

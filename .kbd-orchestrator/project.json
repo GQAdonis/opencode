@@ -1,0 +1,19 @@
+{
+  "name": "opencode",
+  "identity": "Fork of anomalyco/opencode (remote 'upstream'). Default branch: dev.",
+  "stack": {
+    "monorepo": "bun workspaces + turbo",
+    "cli": "packages/opencode (Bun-compiled standalone binary)",
+    "desktop_electron": "packages/desktop (@opencode-ai/desktop) \u2014 upstream-maintained Electron app",
+    "desktop_tauri": "packages/desktop-tauri (@opencode-ai/desktop-tauri) \u2014 fork-maintained Tauri v2 app",
+    "frontend_shared": "packages/app + packages/ui (SolidJS)"
+  },
+  "specFiles": [
+    "CLAUDE.md",
+    "AGENTS.md"
+  ],
+  "openspec": true,
+  "activePhase": "v2-architecture-alignment",
+  "constraints": "Keep BOTH desktop apps. Tauri must reach/keep parity and stay fork-maintained. ZERO permanent core divergence on v2: core edits only as upstreamable contributions. packages/opencode is V1 reference-only (AGENTS.md:4) \u2014 nothing lands there.",
+  "change_backend": "openspec"
+}

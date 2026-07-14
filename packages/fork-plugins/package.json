@@ -1,0 +1,27 @@
+{
+  "name": "@opencode-fork/plugins",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Fork-owned opencode plugins. All fork behavior lives here so packages/core stays byte-identical to upstream and syncs stay cheap.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./agent-steps": "./src/agent-steps.ts"
+  },
+  "scripts": {
+    "test": "bun test --timeout 30000",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

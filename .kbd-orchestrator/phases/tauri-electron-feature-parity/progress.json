@@ -1,0 +1,37 @@
+{
+  "phase": "tauri-electron-feature-parity",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "backend": "native-tool",
+  "execution_ready": true,
+  "changes_total": 13,
+  "changes_completed": 13,
+  "next_change": null,
+  "changes": {
+    "change-001": "done",
+    "change-002": "done",
+    "change-003": "done",
+    "change-004": "done",
+    "change-005": "done",
+    "change-006": "done",
+    "change-007": "done",
+    "change-008": "done",
+    "change-009": "done",
+    "change-010": "done",
+    "change-011": "done",
+    "change-012": "done",
+    "change-013": "done"
+  },
+  "decisions": {
+    "versioning": "match-electron-1.15.13",
+    "port_back": "tauri-only",
+    "crash_reports": "local-only"
+  },
+  "tools": {
+    "claude-code": {
+      "last_action": "reflect",
+      "at": "2026-06-03"
+    }
+  },
+  "reflection_complete": true
+}

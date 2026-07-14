@@ -1,0 +1,132 @@
+{
+  "phase": "v2-architecture-alignment",
+  "branch": "v2",
+  "base": "upstream/v2@aa8fc4234d",
+  "change_backend": "openspec",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "completion": {
+    "implementation": {
+      "completed": 1,
+      "total": 10
+    }
+  },
+  "changes": [
+    {
+      "id": "change-001",
+      "slug": "v2-spike-validate-gaps",
+      "status": "complete",
+      "type": "spike",
+      "blocking": true,
+      "depends_on": [],
+      "verdicts": {
+        "Q1_skill_reinvocation_loop": "CONFIRMED — v2 does NOT track loaded skills; block re-sent in request.system every step; tool has no dedupe. Fix survives, moves to change-008.",
+        "Q2_agent_loop_cap": "ZERO-PATCH — plugin ctx.agent.transform sets steps; v2 last-step enforcement (tools:[], toolChoice:none) beats our v1 patch.",
+        "Q3_defs_inlining": "CONFIRMED — $ref survives ToolSchemaProjection.openAI. Upstream bug. Evidence: packages/llm/test/spike-defs-inlining.test.ts",
+        "Q4_tauri_platform_gaps": "ALL 4 CONFIRMED, no new gaps. exportDebugLogs = ONE LINE. wslServers = multi-week Rust subsystem, must be split out.",
+        "hook_decision": "Implement the already-documented session.hook(\"request\") + paired micro-PR: skill tool publishes session.skill.activated."
+      }
+    },
+    {
+      "id": "change-002",
+      "slug": "v2-adopt-natives",
+      "status": "pending",
+      "type": "plugin",
+      "blocking": false,
+      "depends_on": [
+        "change-001"
+      ]
+    },
+    {
+      "id": "change-003",
+      "slug": "v2-tauri-rebase",
+      "status": "pending",
+      "type": "fork",
+      "blocking": false,
+      "depends_on": []
+    },
+    {
+      "id": "change-004",
+      "slug": "v2-tauri-platform-gaps",
+      "status": "pending",
+      "type": "fork",
+      "blocking": false,
+      "depends_on": [
+        "change-003"
+      ],
+      "title_note": "SPLIT: 004a = exportDebugLogs (1 line) + recordFatalRendererError + runDesktopMenuAction"
+    },
+    {
+      "id": "change-005",
+      "slug": "v2-app-model-persistence",
+      "status": "pending",
+      "type": "core-app",
+      "blocking": false,
+      "depends_on": [
+        "change-003"
+      ]
+    },
+    {
+      "id": "change-006",
+      "slug": "v2-llm-inline-defs",
+      "status": "pending",
+      "type": "upstream",
+      "blocking": false,
+      "depends_on": [
+        "change-001"
+      ]
+    },
+    {
+      "id": "change-007",
+      "slug": "v2-skill-guidance-hook",
+      "status": "pending",
+      "type": "upstream",
+      "blocking": true,
+      "depends_on": [
+        "change-001"
+      ]
+    },
+    {
+      "id": "change-008",
+      "slug": "v2-skill-ranking-plugin",
+      "status": "pending",
+      "type": "plugin",
+      "blocking": false,
+      "depends_on": [
+        "change-007",
+        "change-001"
+      ]
+    },
+    {
+      "id": "change-004b",
+      "slug": "v2-tauri-wsl-servers",
+      "status": "deferred",
+      "type": "fork",
+      "blocking": false,
+      "depends_on": [
+        "change-003"
+      ],
+      "note": "wslServers: 11-method Rust subsystem, Windows-only, degrades gracefully. NOT a wiring gap. Deferrable."
+    },
+    {
+      "id": "change-007b",
+      "slug": "v2-skill-tool-publish-activated",
+      "status": "pending",
+      "type": "upstream",
+      "blocking": false,
+      "depends_on": [],
+      "note": "Micro-PR: skill tool publishes session.skill.activated (SessionV2.skill() already does at session.ts:635). Gives change-008 a durable loaded-skill ledger."
+    }
+  ],
+  "decisions": {
+    "governing_constraint": "Zero permanent core divergence. Core changes must be shaped as upstreamable contributions, not private patches.",
+    "abandoned": "The 19-file patch-port onto packages/opencode. That tree is V1 reference-only per AGENTS.md:4 — it applied cleanly because nothing touches it.",
+    "ranking_strategy": "Contribute the missing hook upstream, then build ranking as a pure plugin on top of it.",
+    "dropped": [
+      "Skill.Info.triggers (no home in v2 schema)",
+      "skills.exclude config (v2 permissions supersede)",
+      "skills object config (v2 skills key is string[])"
+    ]
+  },
+  "next_action": "/kbd-apply change-002 (adopt v2 natives — delete 3 patches, ship loop-cap plugin)"
+}
