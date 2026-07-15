@@ -83,6 +83,7 @@ export function host(overrides: Overrides = {}): PluginContext {
       prompt: () => Effect.die("unused session.prompt"),
       command: () => Effect.die("unused session.command"),
       interrupt: () => Effect.die("unused session.interrupt"),
+      hook: () => Effect.die("unused session.hook"),
     },
   }
 }

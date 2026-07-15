@@ -33,6 +33,7 @@ import { InstructionState } from "../instruction-state"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
+import { SessionHooks } from "../hooks"
 import { SessionPending } from "../pending"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
@@ -99,6 +100,7 @@ const layer = Layer.effect(
     const mcpGuidance = yield* McpGuidance.Service
     const entries = yield* InstructionEntry.Service
     const snapshots = yield* Snapshot.Service
+    const sessionHooks = yield* SessionHooks.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
@@ -196,6 +198,24 @@ const layer = Layer.effect(
       const isLastStep = agentInfo.steps !== undefined && currentStep >= agentInfo.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agentInfo.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const messages = [
+        ...toLLMMessages(context, resolved.ref, providerMetadataKey),
+        ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
+      ]
+      // Fire the session request hook before dispatch. Plugins receive a mutable `system` (this
+      // is where the <available_skills> block lives, so skill ranking rewrites it here) plus a
+      // read-only conversation view for scoring decisions.
+      const hooked = yield* sessionHooks.runRequest({
+        sessionID: session.id,
+        agent: agent.id,
+        messages: context.map((message) => ({
+          role: message.type,
+          text: "text" in message && typeof message.text === "string" ? message.text : "",
+        })),
+        system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), history.initial].filter(
+          (part): part is string => part !== undefined && part.length > 0,
+        ),
+      })
       const request = LLM.request({
         model,
         http: {
@@ -206,13 +226,8 @@ const layer = Layer.effect(
           },
         },
         providerOptions: { openai: { promptCacheKey } },
-        system: [agentInfo.system ? agentInfo.system : SessionRunnerSystemPrompt.provider(model), history.initial]
-          .filter((part): part is string => part !== undefined && part.length > 0)
-          .map(SystemPart.make),
-        messages: [
-          ...toLLMMessages(context, resolved.ref, providerMetadataKey),
-          ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : []),
-        ],
+        system: hooked.system.filter((part) => part.length > 0).map(SystemPart.make),
+        messages,
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
@@ -593,5 +608,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     Database.node,
     PluginSupervisor.node,
+    SessionHooks.node,
   ],
 })

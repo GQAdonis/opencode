@@ -21,6 +21,7 @@ import { SkillV2 } from "../skill"
 import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
 import { ToolHooks } from "../tool/hooks"
+import { SessionHooks } from "../session/hooks"
 import { WorkspaceV2 } from "../workspace"
 import { PluginHooks } from "./hooks"
 
@@ -37,6 +38,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
   const toolHooks = yield* ToolHooks.Service
+  const sessionHooks = yield* SessionHooks.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
@@ -379,6 +381,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       prompt: runtime.session.prompt,
       command: runtime.session.command,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      hook: (_name, callback) =>
+        sessionHooks.hook.request((event) => {
+          const output = {
+            sessionID: event.sessionID,
+            agent: event.agent,
+            messages: event.messages,
+            system: event.system,
+          }
+          return Reflect.apply(callback, undefined, [output]).pipe(
+            Effect.tap(() => Effect.sync(() => (event.system = output.system))),
+          )
+        }),
     },
   } satisfies Plugin.Context
 })

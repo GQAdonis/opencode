@@ -18,6 +18,7 @@ import { SkillV2 } from "./skill"
 import { State } from "./state"
 import { ToolRegistry } from "./tool/registry"
 import { ToolHooks } from "./tool/hooks"
+import { SessionHooks } from "./session/hooks"
 import { PluginHooks } from "./plugin/hooks"
 
 export interface Interface {
@@ -154,6 +155,7 @@ export const node = makeLocationNode({
     SkillV2.node,
     ToolRegistry.toolsNode,
     ToolHooks.node,
+    SessionHooks.node,
     PluginHooks.node,
     PluginRuntime.node,
   ],
