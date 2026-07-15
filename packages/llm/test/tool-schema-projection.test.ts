@@ -2,9 +2,91 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../src"
 import { OpenAIChat } from "../src/protocols"
-import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema"
+import { inlineDefs, ToolSchemaProjection } from "../src/protocols/utils/tool-schema"
 import { Auth, LLMClient } from "../src/route"
 import { it } from "./lib/effect"
+
+const hasRef = (value: unknown): boolean => JSON.stringify(value).includes("$ref")
+
+describe("openAI $defs inlining", () => {
+  test("inlines a reused struct and drops the $defs container", () => {
+    const out = ToolSchemaProjection.openAI({
+      type: "object",
+      properties: {
+        origin: { $ref: "#/$defs/Point" },
+        target: { $ref: "#/$defs/Point" },
+      },
+      $defs: {
+        Point: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } } },
+      },
+    })
+    expect(hasRef(out)).toBe(false)
+    expect(out.$defs).toBeUndefined()
+    const props = out.properties as Record<string, { properties?: Record<string, unknown> }>
+    expect(props.origin.properties?.x).toEqual({ type: "number" })
+    expect(props.target.properties?.y).toEqual({ type: "number" })
+  })
+
+  test("resolves nested references transitively", () => {
+    const out = inlineDefs({
+      type: "object",
+      properties: { line: { $ref: "#/$defs/Line" } },
+      $defs: {
+        Line: { type: "object", properties: { from: { $ref: "#/$defs/Point" } } },
+        Point: { type: "object", properties: { x: { type: "number" } } },
+      },
+    })
+    expect(hasRef(out)).toBe(false)
+    const props = out.properties as any
+    expect(props.line.properties.from.properties.x).toEqual({ type: "number" })
+  })
+
+  test("preserves sibling keys on a $ref node", () => {
+    const out = inlineDefs({
+      type: "object",
+      properties: { pt: { $ref: "#/$defs/Point", description: "a point" } },
+      $defs: { Point: { type: "object", properties: { x: { type: "number" } } } },
+    })
+    const props = out.properties as any
+    expect(props.pt.description).toBe("a point")
+    expect(props.pt.type).toBe("object")
+    expect(hasRef(out)).toBe(false)
+  })
+
+  test("terminates on a recursive reference with no dangling $ref", () => {
+    const out = inlineDefs({
+      type: "object",
+      properties: { root: { $ref: "#/$defs/Tree" } },
+      $defs: {
+        Tree: {
+          type: "object",
+          properties: { value: { type: "number" }, next: { $ref: "#/$defs/Tree" } },
+        },
+      },
+    })
+    expect(hasRef(out)).toBe(false)
+    const props = out.properties as any
+    // The non-recursive part survives; the recursive position collapsed to a permissive node.
+    expect(props.root.properties.value).toEqual({ type: "number" })
+    expect(props.root.properties.next).toEqual({})
+  })
+
+  test("drops an unresolvable $ref but keeps its siblings", () => {
+    const out = inlineDefs({
+      type: "object",
+      properties: { x: { $ref: "#/$defs/Missing", description: "kept" } },
+      $defs: { Point: { type: "object" } },
+    })
+    const props = out.properties as any
+    expect(props.x.$ref).toBeUndefined()
+    expect(props.x.description).toBe("kept")
+  })
+
+  test("leaves a schema with no $defs unchanged", () => {
+    const input = { type: "object", properties: { x: { type: "number" } } }
+    expect(inlineDefs(input)).toEqual(input)
+  })
+})
 
 describe("tool schema projections", () => {
   test("moonshot strips $ref siblings and converts tuple arrays to a schema object", () => {
