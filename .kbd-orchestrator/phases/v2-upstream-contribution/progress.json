@@ -4,7 +4,7 @@
   "childPhases": [],
   "childPointer": null,
   "assessment_complete": true,
-  "plan_complete": false,
+  "plan_complete": true,
   "execute_complete": false,
   "reflect_complete": false,
   "implementation_total": 0,
@@ -15,7 +15,7 @@
     "primaryCounter": "implementation",
     "implementation": {
       "completed": 0,
-      "total": 5,
+      "total": 4,
       "status": "PENDING"
     },
     "evidence": {
@@ -39,5 +39,28 @@
   "blocked_changes": [],
   "sourceTool": "unknown",
   "createdBy": "kbd-new-phase",
-  "updatedAt": "2026-07-15T22:22:56Z"
+  "updatedAt": "2026-07-15T22:22:56Z",
+  "changes": [
+    {
+      "id": "v2c-cleanup-and-integration-test",
+      "status": "pending",
+      "outward": false
+    },
+    {
+      "id": "v2c-pr-branches",
+      "status": "pending",
+      "outward": false
+    },
+    {
+      "id": "v2c-submission-drafts",
+      "status": "pending",
+      "outward": false
+    },
+    {
+      "id": "v2c-submit",
+      "status": "pending",
+      "outward": true,
+      "gated": "requires explicit user go-ahead"
+    }
+  ]
 }
