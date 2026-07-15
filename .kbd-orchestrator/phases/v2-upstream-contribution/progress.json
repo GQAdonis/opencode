@@ -3,7 +3,7 @@
   "parentPhase": null,
   "childPhases": [],
   "childPointer": null,
-  "assessment_complete": false,
+  "assessment_complete": true,
   "plan_complete": false,
   "execute_complete": false,
   "reflect_complete": false,
@@ -15,7 +15,7 @@
     "primaryCounter": "implementation",
     "implementation": {
       "completed": 0,
-      "total": 0,
+      "total": 5,
       "status": "PENDING"
     },
     "evidence": {
