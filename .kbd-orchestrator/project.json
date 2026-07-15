@@ -4,8 +4,8 @@
   "stack": {
     "monorepo": "bun workspaces + turbo",
     "cli": "packages/opencode (Bun-compiled standalone binary)",
-    "desktop_electron": "packages/desktop (@opencode-ai/desktop) \u2014 upstream-maintained Electron app",
-    "desktop_tauri": "packages/desktop-tauri (@opencode-ai/desktop-tauri) \u2014 fork-maintained Tauri v2 app",
+    "desktop_electron": "packages/desktop (@opencode-ai/desktop) — upstream-maintained Electron app",
+    "desktop_tauri": "packages/desktop-tauri (@opencode-ai/desktop-tauri) — fork-maintained Tauri v2 app",
     "frontend_shared": "packages/app + packages/ui (SolidJS)"
   },
   "specFiles": [
@@ -13,8 +13,9 @@
     "AGENTS.md"
   ],
   "openspec": true,
-  "activePhase": "v2-architecture-alignment (complete)",
-  "constraints": "Keep BOTH desktop apps. Tauri must reach/keep parity and stay fork-maintained. ZERO permanent core divergence on v2: core edits only as upstreamable contributions. packages/opencode is V1 reference-only (AGENTS.md:4) \u2014 nothing lands there.",
+  "activePhase": "v2-upstream-contribution",
+  "constraints": "Keep BOTH desktop apps. Tauri must reach/keep parity and stay fork-maintained. ZERO permanent core divergence on v2: core edits only as upstreamable contributions. packages/opencode is V1 reference-only (AGENTS.md:4) — nothing lands there.",
   "change_backend": "openspec",
-  "recommendedNextPhase": "v2-upstream-contribution"
+  "recommendedNextPhase": "v2-upstream-contribution",
+  "updatedAt": "2026-07-15T22:22:56Z"
 }
