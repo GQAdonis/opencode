@@ -7,8 +7,8 @@
   "plan_complete": true,
   "completion": {
     "implementation": {
-      "completed": 1,
-      "total": 10
+      "completed": 7,
+      "total": 9
     }
   },
   "changes": [
@@ -20,9 +20,9 @@
       "blocking": true,
       "depends_on": [],
       "verdicts": {
-        "Q1_skill_reinvocation_loop": "CONFIRMED — v2 does NOT track loaded skills; block re-sent in request.system every step; tool has no dedupe. Fix survives, moves to change-008.",
-        "Q2_agent_loop_cap": "ZERO-PATCH — plugin ctx.agent.transform sets steps; v2 last-step enforcement (tools:[], toolChoice:none) beats our v1 patch.",
-        "Q3_defs_inlining": "CONFIRMED — $ref survives ToolSchemaProjection.openAI. Upstream bug. Evidence: packages/llm/test/spike-defs-inlining.test.ts",
+        "Q1_skill_reinvocation_loop": "CONFIRMED \u2014 v2 does NOT track loaded skills; block re-sent in request.system every step; tool has no dedupe. Fix survives, moves to change-008.",
+        "Q2_agent_loop_cap": "ZERO-PATCH \u2014 plugin ctx.agent.transform sets steps; v2 last-step enforcement (tools:[], toolChoice:none) beats our v1 patch.",
+        "Q3_defs_inlining": "CONFIRMED \u2014 $ref survives ToolSchemaProjection.openAI. Upstream bug. Evidence: packages/llm/test/spike-defs-inlining.test.ts",
         "Q4_tauri_platform_gaps": "ALL 4 CONFIRMED, no new gaps. exportDebugLogs = ONE LINE. wslServers = multi-week Rust subsystem, must be split out.",
         "hook_decision": "Implement the already-documented session.hook(\"request\") + paired micro-PR: skill tool publishes session.skill.activated."
       }
@@ -30,7 +30,7 @@
     {
       "id": "change-002",
       "slug": "v2-adopt-natives",
-      "status": "pending",
+      "status": "complete",
       "type": "plugin",
       "blocking": false,
       "depends_on": [
@@ -40,7 +40,7 @@
     {
       "id": "change-003",
       "slug": "v2-tauri-rebase",
-      "status": "pending",
+      "status": "complete",
       "type": "fork",
       "blocking": false,
       "depends_on": []
@@ -48,7 +48,7 @@
     {
       "id": "change-004",
       "slug": "v2-tauri-platform-gaps",
-      "status": "pending",
+      "status": "complete",
       "type": "fork",
       "blocking": false,
       "depends_on": [
@@ -59,7 +59,7 @@
     {
       "id": "change-005",
       "slug": "v2-app-model-persistence",
-      "status": "pending",
+      "status": "complete",
       "type": "core-app",
       "blocking": false,
       "depends_on": [
@@ -69,7 +69,7 @@
     {
       "id": "change-006",
       "slug": "v2-llm-inline-defs",
-      "status": "pending",
+      "status": "complete",
       "type": "upstream",
       "blocking": false,
       "depends_on": [
@@ -79,7 +79,7 @@
     {
       "id": "change-007",
       "slug": "v2-skill-guidance-hook",
-      "status": "pending",
+      "status": "complete",
       "type": "upstream",
       "blocking": true,
       "depends_on": [
@@ -95,6 +95,9 @@
       "depends_on": [
         "change-007",
         "change-001"
+      ],
+      "absorbs": [
+        "loaded-skill ledger via ctx.tool.hook('execute.after') (was change-007b)"
       ]
     },
     {
@@ -111,16 +114,17 @@
     {
       "id": "change-007b",
       "slug": "v2-skill-tool-publish-activated",
-      "status": "pending",
+      "status": "dropped",
       "type": "upstream",
       "blocking": false,
       "depends_on": [],
-      "note": "Micro-PR: skill tool publishes session.skill.activated (SessionV2.skill() already does at session.ts:635). Gives change-008 a durable loaded-skill ledger."
+      "note": "Micro-PR: skill tool publishes session.skill.activated (SessionV2.skill() already does at session.ts:635). Gives change-008 a durable loaded-skill ledger.",
+      "dropped_reason": "DROPPED after verification. Publishing session.skill.activated from the skill TOOL would DOUBLE-INJECT skill content: to-llm-message.ts maps a `skill` message to a user message carrying skill.content, but the tool already injects that same content via its <skill_content> output. And it is UNNECESSARY: change-008 can track loaded skills via the existing ctx.tool.hook('execute.after') (carries tool name, sessionID, and input.id) with ZERO core change. Loaded-skill tracking moves into change-008."
     }
   ],
   "decisions": {
     "governing_constraint": "Zero permanent core divergence. Core changes must be shaped as upstreamable contributions, not private patches.",
-    "abandoned": "The 19-file patch-port onto packages/opencode. That tree is V1 reference-only per AGENTS.md:4 — it applied cleanly because nothing touches it.",
+    "abandoned": "The 19-file patch-port onto packages/opencode. That tree is V1 reference-only per AGENTS.md:4 \u2014 it applied cleanly because nothing touches it.",
     "ranking_strategy": "Contribute the missing hook upstream, then build ranking as a pure plugin on top of it.",
     "dropped": [
       "Skill.Info.triggers (no home in v2 schema)",
@@ -128,5 +132,5 @@
       "skills object config (v2 skills key is string[])"
     ]
   },
-  "next_action": "/kbd-apply change-002 (adopt v2 natives — delete 3 patches, ship loop-cap plugin)"
+  "next_action": "/kbd-apply change-008 (skill ranking plugin: ranks via session.hook('request'), tracks loaded skills via tool.execute.after)"
 }

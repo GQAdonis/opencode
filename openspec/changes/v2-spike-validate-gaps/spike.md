@@ -168,3 +168,20 @@ divergence is **zero**; the fork is a ranking plugin + a loop-cap plugin + the T
 reorders/truncates the list per turn. Q1 showed the renderer stays silent while the hash is
 unchanged — so **ranking must be hysteretic**, or every turn will spam the model. This is now
 the single hardest design problem in change-008.
+
+
+## Post-hoc correction (during change-007b)
+
+change-007b (skill tool publishes `session.skill.activated`) was **DROPPED** after
+verification during implementation. Two reasons:
+
+1. **It would double-inject skill content.** `runner/to-llm-message.ts` maps a `skill`
+   message to a `user` message carrying `skill.content`. The skill *tool* already injects that
+   same content via its `<skill_content>` output. Publishing the event from the tool would put
+   the skill body into the model context twice.
+2. **It is unnecessary.** change-008 can maintain a per-session loaded-skill ledger via the
+   existing `ctx.tool.hook("execute.after")` (the after-event carries `tool`, `sessionID`, and
+   `input.id`) with ZERO core change — strictly better for the zero-divergence goal.
+
+Loaded-skill tracking therefore moves into change-008's plugin. The spike's original
+recommendation to publish the event was wrong; recorded here so the reasoning is not lost.
