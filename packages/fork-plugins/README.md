@@ -16,6 +16,7 @@ paid a merge tax on every sync.
 | Plugin | ID | What it does |
 |---|---|---|
 | `agent-steps` | `fork.agent-steps` | Bounds the agent loop. Upstream leaves `steps` unset, which makes the loop **unbounded** — a model that keeps emitting tool calls repeats forever. This sets a default cap via `ctx.agent.transform`. |
+| `skill-ranking` | `fork.skill-ranking` | Ranks the `<available_skills>` block by relevance to the conversation, drops already-loaded skills, and optionally caps the list — via `ctx.session.hook("request")` and `ctx.tool.hook("execute.after")`. Requires the `session.hook("request")` seam (upstream PR in this fork). |
 
 ## Registration
 
@@ -23,7 +24,18 @@ Plugins are loaded through the ordered `plugins` array in `opencode.json(c)`:
 
 ```jsonc
 {
-  "plugins": ["@opencode-fork/plugins/agent-steps"]
+  "plugins": [
+    "@opencode-fork/plugins/agent-steps",
+    "@opencode-fork/plugins/skill-ranking"
+  ]
+}
+```
+
+With options (top-K cap):
+
+```jsonc
+{
+  "plugins": [["@opencode-fork/plugins/skill-ranking", { "maxShown": 10 }]]
 }
 ```
 
