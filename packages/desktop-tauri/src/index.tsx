@@ -15,6 +15,7 @@ import {
   useCommand,
   type UpdaterState,
 } from "@opencode-ai/app"
+import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -33,8 +34,8 @@ import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidj
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
-import { UPDATER_ENABLED } from "./updater"
-import { webviewZoom } from "./webview-zoom"
+import { runUpdater, UPDATER_ENABLED } from "./updater"
+import { resetZoom, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
@@ -130,6 +131,84 @@ function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
   if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
   onCleanup(history.listen((value: string) => setLastActiveUrl(props.windowID, value)))
   return <MemoryRouter {...props} history={history} />
+}
+
+// The shared app renders a custom application menu on Windows/Linux and dispatches its
+// action-typed entries through `platform.runDesktopMenuAction`. Electron's reference
+// implementation is `packages/desktop/src/main/desktop-menu-actions.ts`; this mirrors it
+// with Tauri APIs. The `never` fallthrough makes a newly added `DesktopMenuAction` a compile
+// error rather than a silently-dead menu entry.
+const runDesktopMenuAction = async (action: DesktopMenuAction): Promise<void> => {
+  const win = getCurrentWindow()
+  switch (action) {
+    case "app.checkForUpdates":
+      await runUpdater({ alertOnFail: true })
+      return
+    case "app.relaunch":
+      await relaunch().catch(() => undefined)
+      return
+    case "view.reload":
+      window.location.reload()
+      return
+    case "view.toggleDevTools":
+      // Tauri exposes no stable JS devtools toggle, and the app grants no devtools capability.
+      // Dev builds open devtools automatically; in production this is intentionally inert.
+      return
+    case "view.resetZoom":
+      resetZoom()
+      return
+    case "view.zoomIn":
+      zoomIn()
+      return
+    case "view.zoomOut":
+      zoomOut()
+      return
+    case "view.toggleFullscreen":
+      await win.setFullscreen(!(await win.isFullscreen())).catch(() => undefined)
+      return
+    case "window.new":
+      // The Tauri shell is single-window by design (MainWindow creation is idempotent — see
+      // the note in menu.ts). Focus the existing window rather than no-op silently.
+      await win.setFocus().catch(() => undefined)
+      return
+    case "window.close":
+      await win.close().catch(() => undefined)
+      return
+    case "window.minimize":
+      await win.minimize().catch(() => undefined)
+      return
+    case "window.toggleMaximize":
+      await win.toggleMaximize().catch(() => undefined)
+      return
+    case "edit.undo":
+    case "edit.redo":
+    case "edit.cut":
+    case "edit.copy":
+    case "edit.paste":
+    case "edit.delete":
+    case "edit.selectAll": {
+      // Edit actions operate on the focused editable element, so they run in the renderer.
+      const command = {
+        "edit.undo": "undo",
+        "edit.redo": "redo",
+        "edit.cut": "cut",
+        "edit.copy": "copy",
+        "edit.paste": "paste",
+        "edit.delete": "delete",
+        "edit.selectAll": "selectAll",
+      }[action]
+      try {
+        document.execCommand(command)
+      } catch {
+        /* no editable target focused */
+      }
+      return
+    }
+    default: {
+      const exhaustive: never = action
+      void exhaustive
+    }
+  }
 }
 
 const createPlatform = (windowID?: string): Platform => {
@@ -482,6 +561,27 @@ const createPlatform = (windowID?: string): Platform => {
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
     webviewZoom,
+
+    // The app feature-detects this member to decide whether to register the `logs.export`
+    // command and show "Export logs" on the crash screen. Without it both are silently
+    // hidden, even though the Rust command has always been reachable from the native menu.
+    exportDebugLogs: () => commands.exportDebugLogs(),
+
+    recordFatalRendererError: async (error) => {
+      // Best-effort: the caller is already handling a fatal error, so failing to log must not
+      // mask it. The Rust binding models optional fields as `T | null`, the app as `T?`.
+      await commands
+        .recordFatalRendererError({
+          error: error.error,
+          url: error.url,
+          version: error.version ?? null,
+          platform: error.platform,
+          os: error.os ?? null,
+        })
+        .catch(() => undefined)
+    },
+
+    runDesktopMenuAction,
 
     checkAppExists: async (appName: string) => {
       return commands.checkAppExists(appName)

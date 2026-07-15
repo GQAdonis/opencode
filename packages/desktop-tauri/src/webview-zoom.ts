@@ -13,6 +13,8 @@ const [webviewZoom, setWebviewZoom] = createSignal(1)
 const MAX_ZOOM_LEVEL = 10
 const MIN_ZOOM_LEVEL = 0.2
 
+const ZOOM_STEP = 0.2
+
 const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
 
 const applyZoom = (next: number) => {
@@ -22,16 +24,18 @@ const applyZoom = (next: number) => {
   })
 }
 
+// Named zoom controls, shared by the Ctrl/Cmd+± keyboard shortcuts and the desktop menu's
+// zoom actions (`runDesktopMenuAction`) so both paths clamp identically.
+const zoomIn = () => applyZoom(clamp(webviewZoom() + ZOOM_STEP))
+const zoomOut = () => applyZoom(clamp(webviewZoom() - ZOOM_STEP))
+const resetZoom = () => applyZoom(1)
+
 window.addEventListener("keydown", (event) => {
   if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return
 
-  let newZoom = webviewZoom()
-
-  if (event.key === "-") newZoom -= 0.2
-  if (event.key === "=" || event.key === "+") newZoom += 0.2
-  if (event.key === "0") newZoom = 1
-
-  applyZoom(clamp(newZoom))
+  if (event.key === "-") zoomOut()
+  if (event.key === "=" || event.key === "+") zoomIn()
+  if (event.key === "0") resetZoom()
 })
 
-export { webviewZoom }
+export { webviewZoom, zoomIn, zoomOut, resetZoom }

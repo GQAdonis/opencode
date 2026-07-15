@@ -33,3 +33,6 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Prometheus KBD orchestration telemetry (local, not source)
+.prometheus/

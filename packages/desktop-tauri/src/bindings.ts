@@ -28,6 +28,7 @@ export const commands = {
 	getWindowId: () => __TAURI_INVOKE<string>("get_window_id"),
 	reportAlive: () => __TAURI_INVOKE<void>("report_alive"),
 	exportDebugLogs: () => __TAURI_INVOKE<string>("export_debug_logs"),
+	recordFatalRendererError: (payload: FatalRendererError) => __TAURI_INVOKE<null>("record_fatal_renderer_error", { payload }),
 };
 
 /** Events */
@@ -37,6 +38,17 @@ export const events = {
 };
 
 /* Types */
+/**
+ * Mirrors `FatalRendererErrorLog` in `packages/app/src/context/platform.tsx`.
+ */
+export type FatalRendererError = {
+		error: string,
+		url: string,
+		version: string | null,
+		platform: string,
+		os: string | null,
+	};
+
 export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" };
 
 export type LinuxDisplayBackend = "wayland" | "auto";

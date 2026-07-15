@@ -600,7 +600,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             finish_first_launch_onboarding,
             get_window_id,
             watchdog::report_alive,
-            logging::export_debug_logs
+            logging::export_debug_logs,
+            crash::record_fatal_renderer_error
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
