@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo, startTransition } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
@@ -77,6 +77,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }),
     )
 
+    // Holds a restore message that arrived before savedReady(). Applied by the effect below
+    // once the persisted store finishes loading (Tauri uses async storage, so the store is not
+    // ready synchronously on mount).
+    const [pendingRestore, setPendingRestore] = createSignal<
+      | {
+          sessionID: string
+          agent: string
+          model: ModelKey
+        }
+      | undefined
+    >(undefined)
+
+    createEffect(() => {
+      if (!savedReady()) return
+      const pending = pendingRestore()
+      if (!pending) return
+      setPendingRestore(undefined)
+      const session = pending.sessionID
+      const existing = saved.session[session]
+      if (existing !== undefined && existing.model !== undefined) return
+      if (handoff.has(handoffKey(serverSDK().scope, sdk().directory, session))) return
+      setSaved("session", session, {
+        agent: pending.agent,
+        model: pending.model,
+        variant: pending.model?.variant ?? null,
+      })
+    })
+
     const [store, setStore] = createStore<{
       current?: string
       draft?: State
@@ -94,8 +122,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const validModel = (model: ModelKey) => {
-      const provider = providers.all().get(model.providerID)
-      return !!provider?.models[model.modelID] && connected().has(model.providerID)
+      // A connected, known provider is sufficient to trust a persisted model. We deliberately
+      // do NOT also require model.modelID to appear in provider.models: custom /
+      // openai-compatible providers have free-form model lists that may not be enumerated into
+      // that map, so the stricter check silently dropped a valid selection and reverted it to
+      // the default. An id that is genuinely invalid surfaces a clear ModelNotFound from the
+      // server rather than a silent revert.
+      return connected().has(model.providerID) && providers.all().has(model.providerID)
     }
 
     const firstModel = (...items: Array<() => ModelKey | undefined>) => {
@@ -201,7 +234,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const prev = scope()
           const next = {
             agent: item.name,
-            model: item.model ?? prev?.model,
+            // The user's existing model selection wins; fall back to the agent's configured
+            // model only when the user has not chosen one.
+            model: prev?.model ?? item.model,
             variant: item.variant ?? prev?.variant,
           } satisfies State
           const session = id()
@@ -251,11 +286,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const selected = () => scope()?.variant
 
     const snapshot = () => {
-      const model = current()
+      // Read the RAW scope selection, not the resolved current(). Rebuilding a ModelKey from
+      // current() loses a custom / openai-compatible model that does not resolve cleanly,
+      // which is the root cause of the model-selection revert.
+      const s = scope()
       return {
         agent: agent.current()?.name,
-        model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
-        variant: selected(),
+        model: s?.model,
+        variant: s?.variant ?? null,
       } satisfies State
     }
 
@@ -396,7 +434,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
-          if (saved.session[session] !== undefined) return
+          // If the persisted store has not loaded yet (Tauri async storage), queue the message
+          // so the effect above applies it once ready. Without this guard restore() reads
+          // saved.session[session] as undefined and overwrites the user's prior model selection
+          // with the last message's model, so the selection appears to revert on the next turn.
+          if (!savedReady()) {
+            setPendingRestore(msg)
+            return
+          }
+          const existing = saved.session[session]
+          if (existing !== undefined && existing.model !== undefined) return
           if (handoff.has(handoffKey(serverSDK().scope, sdk().directory, session))) return
 
           setSaved("session", session, {
