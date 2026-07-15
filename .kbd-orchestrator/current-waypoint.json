@@ -1,23 +1,37 @@
 {
   "phase": "v2-architecture-alignment",
-  "status": "planned",
-  "updatedAt": "2026-07-14",
+  "status": "complete",
+  "updatedAt": "2026-07-15",
   "branch": "v2",
-  "base": "upstream/v2@aa8fc4234d",
+  "base": "upstream/v2@634386fe0f",
   "change_backend": "openspec",
-  "next_action": "/kbd-apply change-001 — spike to validate v2 behavior gaps (BLOCKING)",
-  "next_change": "change-001",
-  "implementationCompleted": 0,
-  "implementationTotal": 8,
+  "next_action": "/kbd-new-phase v2-upstream-contribution — file 3 PRs, delete spike evidence, add ranking integration test",
+  "next_change": null,
+  "implementationCompleted": 9,
+  "implementationTotal": 9,
   "previousPhase": "upstream-merge-2026-07-03",
+  "recommendedNextPhase": "v2-upstream-contribution",
+  "outcome": {
+    "governing_goal": "MET — zero permanent core divergence; only upstream-PR/bug-fix surfaces touch upstream packages",
+    "divergence": {
+      "upstream_pr_core_llm": "8 files +341/-9",
+      "app_bugfix": "1 file +55/-8",
+      "fork_owned_plugins_tauri": "239 files +15842",
+      "other_upstream_packages": "0"
+    },
+    "dropped": "change-007b (would double-inject skill content; unnecessary — loaded-skill tracking via tool.execute.after)",
+    "deferred": "change-004b wslServers (Windows-only 11-method Rust subsystem)"
+  },
+  "carry_forward": [
+    "File 3 upstream PRs: session.hook('request') seam, $defs fix, model-persistence fixes",
+    "Delete spike evidence tests under openspec/changes/v2-spike-validate-gaps/evidence/ before merge",
+    "Add end-to-end integration test for the ranking plugin (currently type-verified only)",
+    "wslServers (004b) still open; recurring upstream/v2 re-sync is standing backlog"
+  ],
   "decisions": {
     "governing_constraint": "zero permanent core divergence; core edits only as upstreamable contributions",
     "v2_branch": "upstream/v2 is the real 2.0 line — upstream/2.0 is a dead 2026-04 exploration branch, upstream/beta is the 1.17.x channel",
-    "v1_tree_frozen": "packages/opencode is V1 reference-only (AGENTS.md:4). No changes land there. Original 19-file patch-port abandoned.",
-    "blocker_found": "session.hook(\"request\") is documented (v2.opencode.ai + plugin READMEs) but NOT implemented — core/src/plugin/hooks.ts exposes only aisdk + tool domains. Plugins cannot rank or truncate the skill list.",
-    "corrections": [
-      "packages/app churn was measured from the wrong baseline: real dev->v2 delta is +2397/-2367, not +28920. Electron desktop is +17/-3, platform.tsx byte-identical. v2 is a backend rewrite, not a frontend rewrite.",
-      "Loop cap, terminal errors, and skills.exclude are all solvable with ZERO core edits (agent config/plugin, native retry taxonomy, permission rules)."
-    ]
+    "v1_tree_frozen": "packages/opencode is V1 reference-only (AGENTS.md). Nothing lands there.",
+    "hook_seam": "session.hook('request') was documented but unimplemented; change-007 implemented it, unblocking the ranking plugin with zero further core edits"
   }
 }

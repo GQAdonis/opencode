@@ -13,7 +13,8 @@
     "AGENTS.md"
   ],
   "openspec": true,
-  "activePhase": "v2-architecture-alignment",
+  "activePhase": "v2-architecture-alignment (complete)",
   "constraints": "Keep BOTH desktop apps. Tauri must reach/keep parity and stay fork-maintained. ZERO permanent core divergence on v2: core edits only as upstreamable contributions. packages/opencode is V1 reference-only (AGENTS.md:4) \u2014 nothing lands there.",
-  "change_backend": "openspec"
+  "change_backend": "openspec",
+  "recommendedNextPhase": "v2-upstream-contribution"
 }

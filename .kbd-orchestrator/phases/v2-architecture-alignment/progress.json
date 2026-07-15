@@ -20,9 +20,9 @@
       "blocking": true,
       "depends_on": [],
       "verdicts": {
-        "Q1_skill_reinvocation_loop": "CONFIRMED — v2 does NOT track loaded skills; block re-sent in request.system every step; tool has no dedupe. Fix survives, moves to change-008.",
-        "Q2_agent_loop_cap": "ZERO-PATCH — plugin ctx.agent.transform sets steps; v2 last-step enforcement (tools:[], toolChoice:none) beats our v1 patch.",
-        "Q3_defs_inlining": "CONFIRMED — $ref survives ToolSchemaProjection.openAI. Upstream bug. Evidence: packages/llm/test/spike-defs-inlining.test.ts",
+        "Q1_skill_reinvocation_loop": "CONFIRMED \u2014 v2 does NOT track loaded skills; block re-sent in request.system every step; tool has no dedupe. Fix survives, moves to change-008.",
+        "Q2_agent_loop_cap": "ZERO-PATCH \u2014 plugin ctx.agent.transform sets steps; v2 last-step enforcement (tools:[], toolChoice:none) beats our v1 patch.",
+        "Q3_defs_inlining": "CONFIRMED \u2014 $ref survives ToolSchemaProjection.openAI. Upstream bug. Evidence: packages/llm/test/spike-defs-inlining.test.ts",
         "Q4_tauri_platform_gaps": "ALL 4 CONFIRMED, no new gaps. exportDebugLogs = ONE LINE. wslServers = multi-week Rust subsystem, must be split out.",
         "hook_decision": "Implement the already-documented session.hook(\"request\") + paired micro-PR: skill tool publishes session.skill.activated."
       }
@@ -124,7 +124,7 @@
   ],
   "decisions": {
     "governing_constraint": "Zero permanent core divergence. Core changes must be shaped as upstreamable contributions, not private patches.",
-    "abandoned": "The 19-file patch-port onto packages/opencode. That tree is V1 reference-only per AGENTS.md:4 — it applied cleanly because nothing touches it.",
+    "abandoned": "The 19-file patch-port onto packages/opencode. That tree is V1 reference-only per AGENTS.md:4 \u2014 it applied cleanly because nothing touches it.",
     "ranking_strategy": "Contribute the missing hook upstream, then build ranking as a pure plugin on top of it.",
     "dropped": [
       "Skill.Info.triggers (no home in v2 schema)",
@@ -132,5 +132,7 @@
       "skills object config (v2 skills key is string[])"
     ]
   },
-  "next_action": "/kbd-apply change-008 (skill ranking plugin: ranks via session.hook('request'), tracks loaded skills via tool.execute.after)"
+  "next_action": "/kbd-apply change-008 (skill ranking plugin: ranks via session.hook('request'), tracks loaded skills via tool.execute.after)",
+  "reflection_complete": true,
+  "phase_status": "complete"
 }
