@@ -203,7 +203,7 @@ export const fromWebSocket = (
     }
   })
 
-export const messageText = (message: string | Uint8Array, decoder: TextDecoder) =>
+export const messageText = (message: string | Uint8Array, decoder: InstanceType<typeof TextDecoder>) =>
   typeof message === "string" ? message : decoder.decode(message)
 
 export interface JsonPrepared {
