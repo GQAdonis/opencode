@@ -26,8 +26,14 @@ const sidecarConfig = getCurrentSidecar(RUST_TARGET)
 
 const binaryPath = cliBinaryPath(`../${CLI_PACKAGE}/dist`, sidecarConfig.ocBinary)
 
+// Stamp the bundled sidecar CLI with the desktop app's own version so it doesn't fall back to
+// upstream's npm-derived placeholder (0.0.0-<channel>-<ts>). The CLI build honors
+// OPENCODE_VERSION (packages/script). Respects an explicit env override.
+const appVersion = (await Bun.file(new URL("../package.json", import.meta.url)).json()).version
+const OPENCODE_VERSION = Bun.env.OPENCODE_VERSION ?? appVersion
+
 await (sidecarConfig.ocBinary.includes("-baseline")
-  ? $`cd ../${CLI_PACKAGE} && bun run build --single --baseline`
-  : $`cd ../${CLI_PACKAGE} && bun run build --single`)
+  ? $`cd ../${CLI_PACKAGE} && OPENCODE_VERSION=${OPENCODE_VERSION} bun run build --single --baseline`
+  : $`cd ../${CLI_PACKAGE} && OPENCODE_VERSION=${OPENCODE_VERSION} bun run build --single`)
 
 await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)
