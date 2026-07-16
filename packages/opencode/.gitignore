@@ -1,4 +1,5 @@
 research
+src/provider/models-snapshot.*
 dist
 dist-*
 gen
