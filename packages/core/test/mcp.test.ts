@@ -187,13 +187,18 @@ function resourceMcpLayer(url: string, onFormCreated?: (form: Form.Info) => Effe
             active: unusedIntegration,
             resolve: unusedIntegration,
             key: unusedIntegration,
-            oauth: unusedIntegration,
             update: unusedIntegration,
             remove: unusedIntegration,
           },
-          attempt: {
+          oauth: {
+            connect: unusedIntegration,
             status: unusedIntegration,
             complete: unusedIntegration,
+            cancel: unusedIntegration,
+          },
+          command: {
+            connect: unusedIntegration,
+            status: unusedIntegration,
             cancel: unusedIntegration,
           },
         }),
@@ -663,7 +668,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       agent: toolIdentity.agent,
       source: {
         type: "tool",
-        messageID: toolIdentity.assistantMessageID,
+        messageID: toolIdentity.messageID,
         callID: "call_mcp_permission",
       },
     })

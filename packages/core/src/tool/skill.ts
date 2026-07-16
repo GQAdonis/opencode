@@ -2,7 +2,7 @@ export * as SkillTool from "./skill"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import path from "path"
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "../fs-util"
 import { SkillV2 } from "../skill"
@@ -79,7 +79,7 @@ export const Plugin = {
                     save: [skill.id],
                     sessionID: context.sessionID,
                     agent: context.agent,
-                    source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                    source: { type: "tool", messageID: context.messageID, callID: context.callID },
                   })
                   const directory = path.dirname(skill.location)
                   const files =

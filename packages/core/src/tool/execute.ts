@@ -1,7 +1,7 @@
 export * as ExecuteTool from "./execute"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
-import { ToolOutput } from "@opencode-ai/llm"
+import { ToolOutput } from "@opencode-ai/ai"
 import { Effect, Ref, Schema } from "effect"
 import { definition, make, settle, type AnyTool } from "./tool"
 
@@ -113,12 +113,13 @@ export const create = (registrations: ReadonlyMap<string, Registration>) => {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
               const output = yield* settle(
                 registration.tool,
-                { type: "tool-call", id: context.toolCallID, name, input },
+                { type: "tool-call", id: context.callID, name, input },
                 {
                   sessionID: context.sessionID,
                   agent: context.agent,
-                  assistantMessageID: context.assistantMessageID,
-                  toolCallID: context.toolCallID,
+                  messageID: context.messageID,
+                  callID: context.callID,
+                  progress: context.progress,
                 },
               ).pipe(Effect.mapError((failure) => toolError(failure.message, failure)))
               const outputFileParts = outputFiles(output)

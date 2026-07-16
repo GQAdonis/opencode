@@ -1,5 +1,9 @@
 export type JsonValue = null | boolean | number | string | Array<JsonValue> | { [key: string]: JsonValue }
 
+export type ServiceHealth = { healthy: true; version: string; pid: number }
+
+export type ServiceStopResponse = { accepted: boolean }
+
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
 export type ProviderSettings = { [x: string]: JsonValue }
@@ -183,6 +187,8 @@ export type ProviderV2Info = {
 
 export type IntegrationWhen = { key: string; op: "eq" | "neq"; value: string }
 
+export type IntegrationCommandMethod = { id: string; type: "command"; label: string; command: Array<string> }
+
 export type IntegrationKeyMethod = { type: "key"; label?: string }
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
@@ -194,6 +200,31 @@ export type ConnectionEnvInfo = { type: "env"; name: string }
 export type IntegrationAttemptStatus =
   | {
       status: "pending"
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+    }
+  | {
+      status: "complete"
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+    }
+  | {
+      status: "failed"
+      message: string
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+    }
+  | {
+      status: "expired"
+      time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+    }
+
+export type IntegrationCommandAttempt = {
+  attemptID: string
+  time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
+}
+
+export type IntegrationCommandAttemptStatus =
+  | {
+      status: "pending"
+      message?: string
       time: { created: number | "Infinity" | "-Infinity" | "NaN"; expires: number | "Infinity" | "-Infinity" | "NaN" }
     }
   | {
@@ -551,7 +582,7 @@ export type SessionMoved = {
   type: "session.moved"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; location: LocationRef; subpath?: string }
+  data: { sessionID: string; location: LocationRef; projectID?: string; subpath?: string }
 }
 
 export type SessionRenamed = {
@@ -1988,7 +2019,11 @@ export type SessionMessageAssistantTool = {
   time: { created: number; ran?: number; completed?: number }
 }
 
-export type IntegrationMethod = IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod
+export type IntegrationMethod =
+  | IntegrationOAuthMethod
+  | IntegrationCommandMethod
+  | IntegrationKeyMethod
+  | IntegrationEnvMethod
 
 export type FormFields = [FormField, ...Array<FormField>]
 
@@ -2483,7 +2518,11 @@ export type ProjectCopyError = {
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
 
-export type HealthGetOutput = { healthy: true; version: string; pid: number }
+export type HealthGetOutput = ServiceHealth
+
+export type HealthStopInput = { readonly instanceID: { readonly instanceID: string }["instanceID"] }
+
+export type HealthStopOutput = ServiceStopResponse
 
 export type ServerGetOutput = { urls: Array<string> }
 
@@ -2692,14 +2731,8 @@ export type SessionRenameOutput = void
 
 export type SessionMoveInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly destination: {
-    readonly destination: { readonly directory: string }
-    readonly moveChanges?: boolean | undefined
-  }["destination"]
-  readonly moveChanges?: {
-    readonly destination: { readonly directory: string }
-    readonly moveChanges?: boolean | undefined
-  }["moveChanges"]
+  readonly directory: { readonly directory: string; readonly workspaceID?: string }["directory"]
+  readonly workspaceID?: { readonly directory: string; readonly workspaceID?: string }["workspaceID"]
 }
 
 export type SessionMoveOutput = void
@@ -3282,7 +3315,7 @@ export type IntegrationConnectKeyInput = {
 
 export type IntegrationConnectKeyOutput = void
 
-export type IntegrationConnectOauthInput = {
+export type IntegrationOauthConnectInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -3304,7 +3337,7 @@ export type IntegrationConnectOauthInput = {
   }["label"]
 }
 
-export type IntegrationConnectOauthOutput = {
+export type IntegrationOauthConnectOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: {
     attemptID: string
@@ -3315,36 +3348,76 @@ export type IntegrationConnectOauthOutput = {
   }
 }
 
-export type IntegrationAttemptStatusInput = {
-  readonly attemptID: { readonly attemptID: string }["attemptID"]
+export type IntegrationOauthStatusInput = {
+  readonly integrationID: { readonly integrationID: string; readonly attemptID: string }["integrationID"]
+  readonly attemptID: { readonly integrationID: string; readonly attemptID: string }["attemptID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type IntegrationAttemptStatusOutput = {
+export type IntegrationOauthStatusOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
   data: IntegrationAttemptStatus
 }
 
-export type IntegrationAttemptCompleteInput = {
-  readonly attemptID: { readonly attemptID: string }["attemptID"]
+export type IntegrationOauthCompleteInput = {
+  readonly integrationID: { readonly integrationID: string; readonly attemptID: string }["integrationID"]
+  readonly attemptID: { readonly integrationID: string; readonly attemptID: string }["attemptID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
   readonly code?: { readonly code?: string | undefined }["code"]
 }
 
-export type IntegrationAttemptCompleteOutput = void
+export type IntegrationOauthCompleteOutput = void
 
-export type IntegrationAttemptCancelInput = {
-  readonly attemptID: { readonly attemptID: string }["attemptID"]
+export type IntegrationOauthCancelInput = {
+  readonly integrationID: { readonly integrationID: string; readonly attemptID: string }["integrationID"]
+  readonly attemptID: { readonly integrationID: string; readonly attemptID: string }["attemptID"]
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
 }
 
-export type IntegrationAttemptCancelOutput = void
+export type IntegrationOauthCancelOutput = void
+
+export type IntegrationCommandConnectInput = {
+  readonly integrationID: { readonly integrationID: string }["integrationID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly methodID: { readonly methodID: string; readonly label?: string | undefined }["methodID"]
+  readonly label?: { readonly methodID: string; readonly label?: string | undefined }["label"]
+}
+
+export type IntegrationCommandConnectOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: IntegrationCommandAttempt
+}
+
+export type IntegrationCommandStatusInput = {
+  readonly integrationID: { readonly integrationID: string; readonly attemptID: string }["integrationID"]
+  readonly attemptID: { readonly integrationID: string; readonly attemptID: string }["attemptID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type IntegrationCommandStatusOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string } }
+  data: IntegrationCommandAttemptStatus
+}
+
+export type IntegrationCommandCancelInput = {
+  readonly integrationID: { readonly integrationID: string; readonly attemptID: string }["integrationID"]
+  readonly attemptID: { readonly integrationID: string; readonly attemptID: string }["attemptID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type IntegrationCommandCancelOutput = void
 
 export type McpListInput = {
   readonly location?: {

@@ -2,7 +2,7 @@ export * as ReadTool from "./read"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { dirname } from "path"
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
@@ -62,8 +62,8 @@ export const Plugin = {
               return Effect.gen(function* () {
                 const source = {
                   type: "tool" as const,
-                  messageID: context.assistantMessageID,
-                  callID: context.toolCallID,
+                  messageID: context.messageID,
+                  callID: context.callID,
                 }
                 const target = yield* mutation.resolve({ path: input.path, kind: "directory" })
                 const external = target.externalDirectory

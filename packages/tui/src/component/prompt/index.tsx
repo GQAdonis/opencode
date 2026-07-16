@@ -23,7 +23,6 @@ import { useClipboard } from "../../context/clipboard"
 import { Spinner } from "../spinner"
 import { useClient } from "../../context/client"
 import { useRoute } from "../../context/route"
-import { useProject } from "../../context/project"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
@@ -53,7 +52,9 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { contextUsage } from "../../util/session"
+import { abbreviateHome } from "../../runtime"
 
 registerOpencodeSpinner()
 
@@ -137,6 +138,18 @@ function formatEditorContext(selection: EditorSelection) {
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
 
+function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
+  if (!input.startsWith("/")) return
+  const separator = input.search(/\s/)
+  const name = input.slice(1, separator === -1 ? undefined : separator)
+  const command = commands.find(
+    (command) =>
+      command.slash?.arguments && (command.slash.name === name || command.slash.aliases?.includes(name) === true),
+  )
+  if (!command) return
+  return { command, input: separator === -1 ? "" : input.slice(separator + 1) }
+}
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -151,8 +164,8 @@ export function Prompt(props: PromptProps) {
   const client = useClient()
   const editor = useEditorContext()
   const route = useRoute()
-  const project = useProject()
   const data = useData()
+  const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
   const config = useConfig().data
   const dialog = useDialog()
@@ -165,7 +178,8 @@ export function Prompt(props: PromptProps) {
       .filter((id) => id !== props.sessionID && data.session.status(id) === "running").length
   })
   const runningShells = createMemo(
-    () => data.shell.list(currentLocation()).filter((shell) => shell.metadata.sessionID === props.sessionID).length,
+    () =>
+      data.shell.list(currentLocation.current).filter((shell) => shell.metadata.sessionID === props.sessionID).length,
   )
   const history = usePromptHistory()
   const stash = usePromptStash()
@@ -214,9 +228,34 @@ export function Prompt(props: PromptProps) {
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const move = usePromptMove({
-    projectID: () => (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ?? project.project(),
+    projectID: () =>
+      (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ?? data.location.info()?.project.id,
     sessionID: () => props.sessionID,
   })
+  Keymap.createLayer(() => ({
+    mode: "global",
+    enabled: props.sessionID !== undefined,
+    commands: [
+      {
+        id: "session.cd",
+        title: "Change working directory",
+        slash: { name: "cd", arguments: true },
+        run: async (input) => {
+          const sessionID = props.sessionID
+          if (!sessionID) return
+          if (!input?.trim()) {
+            toast.show({ message: "Directory is required", variant: "error" })
+            return
+          }
+          await client.api.session
+            .move({ sessionID, directory: input })
+            .catch((error) =>
+              toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" }),
+            )
+        },
+      },
+    ],
+  }))
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const connected = useConnected()
@@ -244,7 +283,7 @@ export function Prompt(props: PromptProps) {
   const event = useEvent()
 
   event.on("tui.prompt.append", (evt, { workspace }) => {
-    if (workspace !== project.workspace.current()) return
+    if (workspace !== (currentLocation.current?.workspaceID ?? data.location.default().workspaceID)) return
     if (!input || input.isDestroyed) return
     input.insertText(evt.data.text)
     setTimeout(() => {
@@ -450,7 +489,7 @@ export function Prompt(props: PromptProps) {
         title: "Open editor",
         category: "Session",
         name: "prompt.editor",
-        slashName: "editor",
+        slash: { name: "editor" },
         run: async () => {
           dialog.clear()
 
@@ -465,8 +504,8 @@ export function Prompt(props: PromptProps) {
             renderer,
             value,
             cwd:
-              (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
-              project.instance.directory() ||
+              (data.location.info()?.project.directory === "/" ? undefined : data.location.info()?.project.directory) ||
+              data.location.default().directory ||
               paths.cwd,
           })
           if (!content) return
@@ -498,11 +537,11 @@ export function Prompt(props: PromptProps) {
         title: "Skills",
         name: "prompt.skills",
         category: "Prompt",
-        slashName: "skills",
+        slash: { name: "skills" },
         run: () => {
           dialog.replace(() => (
             <DialogSkill
-              location={currentLocation()}
+              location={currentLocation.current}
               onSelect={(skill) => {
                 input.setText(`/${skill} `)
                 setStore("prompt", {
@@ -520,7 +559,7 @@ export function Prompt(props: PromptProps) {
         desc: "Move to another project dir",
         name: "session.move",
         category: "Session",
-        slashName: "move",
+        slash: { name: "move" },
         run: () => {
           move.open()
         },
@@ -537,7 +576,7 @@ export function Prompt(props: PromptProps) {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    bindings: config.keybinds.gather("prompt.palette", [
+    bindings: [
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
@@ -548,7 +587,7 @@ export function Prompt(props: PromptProps) {
       "session.interrupt",
       "session.background",
       "session.move",
-    ]),
+    ].flatMap((command) => config.keybinds.get(command)),
   }))
 
   const ref: PromptRef = {
@@ -947,6 +986,12 @@ export function Prompt(props: PromptProps) {
       void exit()
       return true
     }
+    const slash = argumentSlash(store.prompt.text, keymapCommands())
+    if (slash) {
+      clearPrompt()
+      await slash.command.run(slash.input)
+      return true
+    }
     const agent = local.agent.current()
     if (!agent) return false
     const selectedModel = local.model.current()
@@ -1016,7 +1061,7 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      (data.location.command.list(currentLocation()) ?? []).some(
+      (data.location.command.list(currentLocation.current) ?? []).some(
         (command) => command.name === inputText.split("\n")[0].split(" ")[0].slice(1),
       )
     ) {
@@ -1043,7 +1088,7 @@ export function Prompt(props: PromptProps) {
         })
     } else if (
       inputText.startsWith("/") &&
-      (data.location.skill.list(currentLocation()) ?? []).some(
+      (data.location.skill.list(currentLocation.current) ?? []).some(
         (skill) => skill.slash === true && skill.id === inputText.split("\n")[0].split(" ")[0].slice(1),
       )
     ) {
@@ -1055,7 +1100,7 @@ export function Prompt(props: PromptProps) {
     } else {
       move.startSubmit()
       if (!session) {
-        await data.session.refresh(sessionID)
+        await data.session.sync(sessionID)
         session = data.session.get(sessionID)
       }
       if (session?.agent !== agent.id) {
@@ -1188,10 +1233,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-    if (
-      (lineCount >= 3 || pastedContent.length > 150) &&
-      config.prompt?.paste !== "full"
-    ) {
+    if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
     }
@@ -1296,12 +1338,14 @@ export function Prompt(props: PromptProps) {
     if (!list().length) return undefined
     return `Ask anything... "${list()[store.placeholder % list().length]}"`
   })
+  const locationLabel = createMemo(() => {
+    if (!props.sessionID || status() !== "idle") return
+    const directory = data.session.get(props.sessionID)?.location.directory
+    return directory ? abbreviateHome(directory, paths.home) : undefined
+  })
 
   const spinnerDef = createMemo(() => {
-    const agent =
-      status() === "running"
-        ? local.agent.current()
-        : local.agent.current()
+    const agent = status() === "running" ? local.agent.current() : local.agent.current()
     const color = agent ? local.agent.color(agent.id) : theme.border
     return {
       frames: createFrames({
@@ -1321,7 +1365,6 @@ export function Prompt(props: PromptProps) {
     }
   })
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
-  const moveLabelWidth = createMemo(() => Math.max(12, Math.min(44, dimensions().width - 48)))
 
   return (
     <>
@@ -1521,7 +1564,18 @@ export function Prompt(props: PromptProps) {
                 <text fg={theme.accent}>(new working copy)</text>
               </box>
             </Match>
-            <Match when={true}>{props.hint ?? <text />}</Match>
+            <Match when={true}>
+              <Show
+                when={!props.hint && locationLabel()}
+                fallback={props.hint ?? <text />}
+              >
+                {(location) => (
+                  <text fg={theme.textMuted} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                    {location()}
+                  </text>
+                )}
+              </Show>
+            </Match>
           </Switch>
           <box gap={2} flexDirection="row">
             <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>

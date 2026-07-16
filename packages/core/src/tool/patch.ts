@@ -1,7 +1,7 @@
 export * as PatchTool from "./patch"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
@@ -85,8 +85,8 @@ export const Plugin = {
                 return Effect.gen(function* () {
                   const source = {
                     type: "tool" as const,
-                    messageID: context.assistantMessageID,
-                    callID: context.toolCallID,
+                    messageID: context.messageID,
+                    callID: context.callID,
                   }
                   if (!input.patchText.trim()) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.try({
@@ -195,6 +195,19 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    yield* ctx.session.hook("context", (event) =>
+      Effect.sync(() => {
+        const usePatch =
+          event.model.providerID.toLowerCase() === "openai" || event.model.id.toLowerCase().includes("gpt")
+        if (usePatch) {
+          delete event.tools.edit
+          delete event.tools.write
+          return
+        }
+        delete event.tools.patch
+      }),
+    )
   }),
 }
 

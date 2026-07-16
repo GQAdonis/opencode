@@ -1,29 +1,24 @@
 import type { SessionApi } from "@opencode-ai/client/effect/api"
+import type { Message, SystemPart } from "@opencode-ai/ai"
+import type { Agent } from "@opencode-ai/schema/agent"
+import type { Model } from "@opencode-ai/schema/model"
+import type { Session } from "@opencode-ai/schema/session"
+import type { JsonSchema } from "effect"
 import type { Hooks } from "./registration.js"
 
-/** A read-only projection of one conversation message. */
-export interface SessionMessageView {
-  readonly role: string
-  readonly text: string
-}
-
-/**
- * Fires once per model request, immediately before dispatch. `system` is mutable — rewrite or
- * reorder its entries to change what the model sees (e.g. the `<available_skills>` block).
- * `messages` is a read-only conversation view for scoring decisions.
- */
-export interface SessionRequestEvent {
-  readonly sessionID: string
-  readonly agent: string
-  readonly messages: ReadonlyArray<SessionMessageView>
-  system: string[]
+export interface SessionContext {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  system: Array<SystemPart>
+  messages: Array<Message>
+  tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
 export interface SessionHooks {
-  readonly request: SessionRequestEvent
+  readonly context: SessionContext
 }
 
-export interface SessionDomain
-  extends Pick<SessionApi<unknown>, "create" | "get" | "prompt" | "command" | "interrupt"> {
+export type SessionDomain = Pick<SessionApi<unknown>, "create" | "get" | "prompt" | "command" | "interrupt"> & {
   readonly hook: Hooks<SessionHooks>
 }

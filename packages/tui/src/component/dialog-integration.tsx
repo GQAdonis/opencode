@@ -1,16 +1,17 @@
 import { TextAttributes } from "@opentui/core"
 import type {
   ConnectionInfo,
-  IntegrationConnectOauthOutput,
+  IntegrationCommandConnectOutput,
   IntegrationInfo,
+  IntegrationOauthConnectOutput,
   IntegrationOAuthMethod,
 } from "@opencode-ai/client"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
+import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { useBindings } from "../keymap"
 import { useDialog } from "../ui/dialog"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
@@ -27,7 +28,8 @@ const INTEGRATION_PRIORITY: Record<string, number> = {
 }
 
 type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }>
-type IntegrationAttempt = IntegrationConnectOauthOutput["data"]
+type IntegrationAttempt = IntegrationOauthConnectOutput["data"]
+type CommandAttempt = IntegrationCommandConnectOutput["data"]
 type OnIntegrationConnected = (providerID?: string) => void
 
 export function integrationOptions(list: IntegrationInfo[]) {
@@ -167,7 +169,128 @@ function openMethod(
     dialog.replace(() => <KeyMethod integration={integration} method={method} onConnected={onConnected} />)
     return
   }
+  if (method.type === "command") {
+    dialog.replace(() => <CommandStarting integration={integration} method={method} onConnected={onConnected} />)
+    return
+  }
   void beginOAuth(integration, method, dialog, onConnected)
+}
+
+function CommandStarting(props: {
+  integration: IntegrationInfo
+  method: Extract<ConnectMethod, { type: "command" }>
+  onConnected?: OnIntegrationConnected
+}) {
+  const data = useData()
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+
+  onMount(() => {
+    void client.api.integration.command
+      .connect({
+        integrationID: props.integration.id,
+        methodID: props.method.id,
+        location: location(data),
+      })
+      .then((result) =>
+        dialog.replace(() => (
+          <CommandPending
+            integration={props.integration}
+            title={props.method.label}
+            attempt={result.data}
+            onConnected={props.onConnected}
+          />
+        )),
+      )
+      .catch((cause) => {
+        toast.show({ variant: "error", message: message(cause) })
+        dialog.clear()
+      })
+  })
+
+  return <CommandView title={props.method.label} output="" message="Starting command..." />
+}
+
+function CommandPending(props: {
+  integration: IntegrationInfo
+  title: string
+  attempt: CommandAttempt
+  onConnected?: OnIntegrationConnected
+}) {
+  const data = useData()
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+  const [output, setOutput] = createSignal("")
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let settled = false
+
+  const poll = () => {
+    void client.api.integration.command
+      .status({
+        integrationID: props.integration.id,
+        attemptID: props.attempt.attemptID,
+        location: location(data),
+      })
+      .then((result) => {
+        const status = result.data
+        if (status.status === "pending") {
+          setOutput(status.message ?? "")
+          timer = setTimeout(poll, 500)
+          return
+        }
+        settled = true
+        if (status.status === "complete") {
+          void connected(props.integration, data, dialog, toast, props.onConnected)
+          return
+        }
+        toast.show({
+          variant: "error",
+          message: status.status === "failed" ? status.message : "Authentication expired",
+        })
+        dialog.clear()
+      })
+      .catch((cause) => {
+        settled = true
+        toast.show({ variant: "error", message: message(cause) })
+        dialog.clear()
+      })
+  }
+
+  onMount(poll)
+  onCleanup(() => {
+    if (timer) clearTimeout(timer)
+    if (settled) return
+    void client.api.integration.command.cancel({
+      integrationID: props.integration.id,
+      attemptID: props.attempt.attemptID,
+      location: location(data),
+    })
+  })
+
+  return <CommandView title={props.title} output={output()} message="Waiting for command to finish..." />
+}
+
+function CommandView(props: { title: string; output: string; message: string }) {
+  const dialog = useDialog()
+  const { theme } = useTheme()
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          {props.title}
+        </text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc close
+        </text>
+      </box>
+      <box backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
+        <text fg={theme.text}>{props.output}</text>
+      </box>
+      <text fg={theme.textMuted}>{props.message}</text>
+    </box>
+  )
 }
 
 function KeyMethod(props: {
@@ -227,8 +350,8 @@ function OAuthStarting(props: {
   const toast = useToast()
 
   onMount(() => {
-    void client.api.integration.connect
-      .oauth({
+    void client.api.integration.oauth
+      .connect({
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
@@ -278,13 +401,14 @@ function OAuthAuto(props: {
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
 
-  useBindings(() => ({
-    bindings: [
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    commands: [
       {
-        key: "c",
-        desc: "Copy authorization details",
+        bind: "c",
+        title: "Copy authorization details",
         group: "Dialog",
-        cmd: () => {
+        run: () => {
           const value = props.attempt.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.attempt.url
           clipboard
             .write?.(value)
@@ -296,8 +420,8 @@ function OAuthAuto(props: {
   }))
 
   const poll = () => {
-    void client.api.integration.attempt
-      .status({ attemptID: props.attempt.attemptID, location: location(data) })
+    void client.api.integration.oauth
+      .status({ integrationID: props.integration.id, attemptID: props.attempt.attemptID, location: location(data) })
       .then((result) => {
         const status = result.data
         if (status.status === "pending") {
@@ -323,7 +447,11 @@ function OAuthAuto(props: {
   onCleanup(() => {
     if (timer) clearTimeout(timer)
     if (settled) return
-    void client.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void client.api.integration.oauth.cancel({
+      integrationID: props.integration.id,
+      attemptID: props.attempt.attemptID,
+      location: location(data),
+    })
   })
 
   return (
@@ -353,7 +481,11 @@ function OAuthCode(props: {
 
   onCleanup(() => {
     if (settled) return
-    void client.api.integration.attempt.cancel({ attemptID: props.attempt.attemptID, location: location(data) })
+    void client.api.integration.oauth.cancel({
+      integrationID: props.integration.id,
+      attemptID: props.attempt.attemptID,
+      location: location(data),
+    })
   })
 
   return (
@@ -362,8 +494,13 @@ function OAuthCode(props: {
       placeholder="Authorization code"
       onConfirm={(code) => {
         if (!code) return
-        void client.api.integration.attempt
-          .complete({ attemptID: props.attempt.attemptID, location: location(data), code })
+        void client.api.integration.oauth
+          .complete({
+            integrationID: props.integration.id,
+            attemptID: props.attempt.attemptID,
+            location: location(data),
+            code,
+          })
           .then(() => {
             settled = true
             return connected(props.integration, data, dialog, toast, props.onConnected)
@@ -466,11 +603,10 @@ async function connected(
   toast: ReturnType<typeof useToast>,
   onConnected?: OnIntegrationConnected,
 ) {
-  await Promise.all([
-    data.location.integration.refresh(),
-    data.location.model.refresh(),
-    data.location.provider.refresh(),
-  ])
+  data.location.integration.invalidate()
+  data.location.model.invalidate()
+  data.location.provider.invalidate()
+  await Promise.all([data.location.integration.sync(), data.location.model.sync(), data.location.provider.sync()])
   toast.show({ variant: "success", message: `Connected ${integration.name}` })
   if (onConnected) {
     onConnected(providerID(data, integration.id))
@@ -497,11 +633,10 @@ async function disconnected(
   dialog: ReturnType<typeof useDialog>,
   toast: ReturnType<typeof useToast>,
 ) {
-  await Promise.all([
-    data.location.integration.refresh(),
-    data.location.model.refresh(),
-    data.location.provider.refresh(),
-  ])
+  data.location.integration.invalidate()
+  data.location.model.invalidate()
+  data.location.provider.invalidate()
+  await Promise.all([data.location.integration.sync(), data.location.model.sync(), data.location.provider.sync()])
   toast.show({ variant: "success", message: `Disconnected ${name}` })
   dialog.clear()
 }

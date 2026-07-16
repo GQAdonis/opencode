@@ -80,20 +80,16 @@ yield *
 
 Hooks run sequentially in registration order. Later hooks observe mutations made by earlier hooks.
 
-The system prompt is mutable immediately before provider dispatch. The event also carries a
-read-only conversation view (`{ role, text }` per message) and the acting `agent`/`sessionID`,
-so a plugin can decide what to change based on context — e.g. rank or trim the
-`<available_skills>` block:
+Session context is mutable immediately before provider dispatch:
 
 ```ts
 yield *
-  ctx.session.hook("request", (event) => {
-    // event.messages: ReadonlyArray<{ role, text }>  — conversation so far
-    // event.system: string[]                          — mutable system prompt parts
-    event.system = event.system.map((part) =>
-      part.includes("<available_skills>") ? rerankSkills(part, event.messages) : part,
-    )
-  })
+  ctx.session.hook("context", (event) =>
+    Effect.sync(() => {
+      event.tools.read.description = "Read a file using narrow line ranges."
+      delete event.tools.write
+    }),
+  )
 ```
 
 ## Reloading A Domain

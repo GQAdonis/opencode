@@ -1,6 +1,6 @@
 export * as SubagentTool from "./subagent"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { AgentV2 } from "../agent"
@@ -136,8 +136,8 @@ export const Plugin = {
                     agent: context.agent,
                     source: {
                       type: "tool",
-                      messageID: context.assistantMessageID,
-                      callID: context.toolCallID,
+                      messageID: context.messageID,
+                      callID: context.callID,
                     },
                   })
                   .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
@@ -160,6 +160,9 @@ export const Plugin = {
                   )
 
                 const background = input.background === true
+                yield* context.progress({
+                  structured: { sessionID: child.id, status: "running" },
+                })
 
                 const run = Effect.gen(function* () {
                   // The child session owns its agent/model (set at create); prompt only admits input.
@@ -212,5 +215,32 @@ export const Plugin = {
         ),
       )
       .pipe(Effect.orDie)
+
+    yield* ctx.session.hook("context", (event) =>
+      Effect.gen(function* () {
+        const tool = event.tools[name]
+        if (!tool) return
+        const selected = yield* agents.resolve(event.agent)
+        if (!selected) return
+        const available = (yield* agents.list())
+          .filter(
+            (agent) =>
+              agent.mode !== "primary" &&
+              !agent.hidden &&
+              PermissionV2.evaluate(name, agent.id, selected.permissions).effect !== "deny",
+          )
+          .toSorted((a, b) => a.id.localeCompare(b.id))
+        if (available.length === 0) return
+        tool.description = [
+          tool.description,
+          "",
+          "Available subagents:",
+          ...available.map(
+            (agent) =>
+              `- ${agent.id}: ${agent.description ?? "This subagent should only be called when explicitly requested."}`,
+          ),
+        ].join("\n")
+      }),
+    )
   }),
 }

@@ -1,13 +1,21 @@
 import { describe, expect } from "bun:test"
+import { Message, SystemPart } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
+import { Catalog } from "@opencode-ai/core/catalog"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginPromise } from "@opencode-ai/core/plugin/promise"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Plugin } from "@opencode-ai/plugin/v2"
+import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
+import { Model } from "@opencode-ai/schema/model"
+import { Provider } from "@opencode-ai/schema/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -43,6 +51,37 @@ describe("fromPromise", () => {
     }),
   )
 
+  it.effect("forwards direct agent and model reads", () =>
+    Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      const catalog = yield* Catalog.Service
+      const plugin = yield* PluginV2.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* agents.transform((draft) =>
+        draft.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.description = "Reviews code"
+        }),
+      )
+      yield* catalog.transform((draft) =>
+        draft.model.update(ProviderV2.ID.make("test"), ModelV2.ID.make("alias"), (model) => {
+          model.modelID = ModelV2.ID.make("gpt-5")
+        }),
+      )
+
+      yield* PluginPromise.fromPromise(
+        Plugin.define({
+          id: "promise-direct-reads",
+          setup: async (ctx) => {
+            expect(await ctx.agent.get("reviewer")).toMatchObject({ description: "Reviews code" })
+            expect(await ctx.agent.get("missing")).toBeUndefined()
+            expect(await ctx.catalog.model.get("test", "alias")).toMatchObject({ modelID: "gpt-5" })
+            expect(await ctx.catalog.model.get("test", "missing")).toBeUndefined()
+          },
+        }),
+      ).effect(host)
+    }),
+  )
+
   it.effect("loads a promise plugin and registers a transform hook", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
@@ -69,6 +108,38 @@ describe("fromPromise", () => {
         description: "Reviews code",
         mode: "subagent",
       })
+    }),
+  )
+
+  it.effect("forwards session context hooks", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      const hooks = yield* PluginHooks.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* PluginPromise.fromPromise(
+        Plugin.define({
+          id: "promise-session-context",
+          setup: async (ctx) => {
+            await ctx.session.hook("context", (event) => {
+              event.system.push(SystemPart.make("Promise hook"))
+              delete event.tools.echo
+            })
+          },
+        }),
+      ).effect(host)
+      const event: SessionHooks["context"] = {
+        sessionID: SessionV2.ID.make("ses_promise_session_context"),
+        agent: AgentV2.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
+        system: [SystemPart.make("Initial")],
+        messages: [Message.user("Hello")],
+        tools: { echo: { description: "Echo", input: { type: "object" } } },
+      }
+
+      yield* hooks.trigger("session", "context", event)
+
+      expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
+      expect(event.tools).toEqual({})
     }),
   )
 
@@ -129,6 +200,7 @@ describe("fromPromise", () => {
       const plugins = yield* PluginV2.Service
       const registry = yield* ToolRegistry.Service
       const host = yield* PluginHost.make(plugins)
+      const progress: ToolRegistry.Progress[] = []
       const promisePlugin = Plugin.define({
         id: "promise-tool",
         setup: async (ctx) => {
@@ -139,7 +211,10 @@ describe("fromPromise", () => {
               description: "Hello",
               input: Schema.Struct({ name: Schema.String }),
               output: Schema.String,
-              execute: async ({ name }) => `Hello, ${name}!`,
+              execute: async ({ name }, context) => {
+                await context.progress({ structured: { phase: "greeting" } })
+                return `Hello, ${name}!`
+              },
             })
           })
         },
@@ -153,10 +228,12 @@ describe("fromPromise", () => {
         yield* materialized.settle({
           sessionID: SessionV2.ID.make("ses_promise_tool"),
           agent: AgentV2.ID.make("build"),
-          assistantMessageID: SessionMessage.ID.make("msg_promise_tool"),
+          messageID: SessionMessage.ID.make("msg_promise_tool"),
+          progress: (update) => Effect.sync(() => progress.push(update)),
           call: { type: "tool-call", id: "call_promise_tool", name: "hello", input: { name: "world" } },
         }),
       ).toMatchObject({ result: { type: "text", value: "Hello, world!" } })
+      expect(progress).toEqual([{ structured: { phase: "greeting" }, content: [] }])
     }),
   )
 })

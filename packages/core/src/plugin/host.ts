@@ -21,7 +21,6 @@ import { SkillV2 } from "../skill"
 import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
 import { ToolHooks } from "../tool/hooks"
-import { SessionHooks } from "../session/hooks"
 import { WorkspaceV2 } from "../workspace"
 import { PluginHooks } from "./hooks"
 
@@ -38,7 +37,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
   const toolHooks = yield* ToolHooks.Service
-  const sessionHooks = yield* SessionHooks.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
@@ -65,6 +63,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   return {
     options: {},
     agent: {
+      get: (id) => agents.get(AgentV2.ID.make(id)),
       list: (input) => {
         const ref = locationRef(input)
         if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
@@ -125,6 +124,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             ),
       },
       model: {
+        get: (providerID, modelID) =>
+          catalog.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
       },
@@ -175,21 +176,57 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             key: input.key,
             label: input.label,
           }),
-        oauth: (input) =>
+      },
+      oauth: {
+        connect: (input) =>
           response(
-            integration.connection.oauth({
+            integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
               inputs: input.inputs,
               label: input.label,
             }),
           ),
-      },
-      attempt: {
-        status: (input) => response(integration.attempt.status(Integration.AttemptID.make(input.attemptID))),
+        status: (input) =>
+          response(
+            integration.oauth.status({
+              integrationID: Integration.ID.make(input.integrationID),
+              attemptID: Integration.AttemptID.make(input.attemptID),
+            }),
+          ),
         complete: (input) =>
-          integration.attempt.complete({ attemptID: Integration.AttemptID.make(input.attemptID), code: input.code }),
-        cancel: (input) => integration.attempt.cancel(Integration.AttemptID.make(input.attemptID)),
+          integration.oauth.complete({
+            integrationID: Integration.ID.make(input.integrationID),
+            attemptID: Integration.AttemptID.make(input.attemptID),
+            code: input.code,
+          }),
+        cancel: (input) =>
+          integration.oauth.cancel({
+            integrationID: Integration.ID.make(input.integrationID),
+            attemptID: Integration.AttemptID.make(input.attemptID),
+          }),
+      },
+      command: {
+        connect: (input) =>
+          response(
+            integration.command.connect({
+              integrationID: Integration.ID.make(input.integrationID),
+              methodID: Integration.MethodID.make(input.methodID),
+              label: input.label,
+            }),
+          ),
+        status: (input) =>
+          response(
+            integration.command.status({
+              integrationID: Integration.ID.make(input.integrationID),
+              attemptID: Integration.AttemptID.make(input.attemptID),
+            }),
+          ),
+        cancel: (input) =>
+          integration.command.cancel({
+            integrationID: Integration.ID.make(input.integrationID),
+            attemptID: Integration.AttemptID.make(input.attemptID),
+          }),
       },
       reload: integration.reload,
       connection: {
@@ -269,6 +306,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                   })
                   return
                 }
+                if (input.method.type === "command") {
+                  draft.method.update({
+                    integrationID: Integration.ID.make(input.integrationID),
+                    method: Schema.decodeUnknownSync(Integration.CommandMethod)(input.method),
+                  })
+                  return
+                }
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { type: "key", label: input.method.label },
@@ -335,8 +379,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               tool: event.tool,
               sessionID: event.sessionID,
               agent: event.agent,
-              assistantMessageID: event.assistantMessageID,
-              toolCallID: event.toolCallID,
+              messageID: event.messageID,
+              callID: event.callID,
               input: event.input,
             }
             return Reflect.apply(callback, undefined, [output]).pipe(
@@ -349,8 +393,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             tool: event.tool,
             sessionID: event.sessionID,
             agent: event.agent,
-            assistantMessageID: event.assistantMessageID,
-            toolCallID: event.toolCallID,
+            messageID: event.messageID,
+            callID: event.callID,
             input: event.input,
             result: event.result,
             output: event.output,
@@ -369,6 +413,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       },
     },
     session: {
+      hook: (name, callback) => hooks.register("session", name, callback),
       create: (input) =>
         runtime.session.create({
           id: input?.id,
@@ -381,18 +426,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       prompt: runtime.session.prompt,
       command: runtime.session.command,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
-      hook: (_name, callback) =>
-        sessionHooks.hook.request((event) => {
-          const output = {
-            sessionID: event.sessionID,
-            agent: event.agent,
-            messages: event.messages,
-            system: event.system,
-          }
-          return Reflect.apply(callback, undefined, [output]).pipe(
-            Effect.tap(() => Effect.sync(() => (event.system = output.system))),
-          )
-        }),
     },
   } satisfies Plugin.Context
 })

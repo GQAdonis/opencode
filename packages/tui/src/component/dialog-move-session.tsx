@@ -5,6 +5,7 @@ import path from "path"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useClient } from "../context/client"
+import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useData } from "../context/data"
 import { abbreviateHome } from "../runtime"
@@ -13,8 +14,6 @@ import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
 import { isRecord } from "../util/record"
 import { useToast } from "../ui/toast"
-import { useCommandShortcut } from "../keymap"
-import { useProject } from "../context/project"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 import type { ProjectDirectoriesOutput } from "@opencode-ai/client"
@@ -41,16 +40,16 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
   const sessionData = useData()
-  const projectContext = useProject()
   const route = useRoute()
   const toast = useToast()
   const paths = useTuiPaths()
+  const shortcuts = Keymap.useShortcuts()
+  const location = createMemo(() => sessionData.location.info())
   const [working, setWorking] = createSignal(Boolean(props.initialRemoving))
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
   const [replacementCurrent, setReplacementCurrent] = createSignal<string>()
   const [loadError, setLoadError] = createSignal<unknown>()
-  const deleteHint = useCommandShortcut("dialog.move_session.delete")
   onMount(() => dialog.setSize("xlarge"))
 
   function reopen(initialRemoving?: string) {
@@ -63,15 +62,15 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   // swallow it and let the directory list render without a current marker.
   // Once the current project is known, a mismatch is a guaranteed miss.
   const [loadedProject] = createResource(
-    () => (projectContext.project() === undefined ? props.projectID : undefined),
+    () => (location()?.project.id === props.projectID ? undefined : props.projectID),
     (projectID) =>
       client.api.project
-        .current({ location: { directory: projectContext.instance.directory() || paths.cwd } })
+        .current({ location: { directory: location()?.directory || paths.cwd } })
         .then((project) => (project.id === projectID ? project.directory : undefined))
         .catch(() => undefined),
   )
   const currentCheckout = createMemo(() => {
-    if (projectContext.project() === props.projectID) return projectContext.instance.path().worktree
+    if (location()?.project.id === props.projectID) return location()?.project.directory
     return loadedProject()
   })
 
@@ -79,14 +78,14 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     () => (props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
-        const location = { directory: projectContext.instance.directory() || paths.cwd }
+        const requestLocation = { directory: location()?.directory || paths.cwd }
         await client.api.projectCopy.refresh({
           projectID,
-          location,
+          location: requestLocation,
         })
         const directories = await client.api.project.directories({
           projectID,
-          location,
+          location: requestLocation,
         })
         setLoadError(undefined)
         return directories
@@ -175,7 +174,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         titleView: isRemoving ? (
           <span style={{ fg: theme.error }}>Deleting {item.location}</span>
         ) : deleting ? (
-          <span style={{ fg: theme.text }}>Press {deleteHint()} again to confirm</span>
+          <span style={{ fg: theme.text }}>Press {shortcuts.get("dialog.move_session.delete")} again to confirm</span>
         ) : suffix ? (
           <>
             {visible.slice(0, split)}
@@ -204,7 +203,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
 
   async function removedCurrent(current: boolean) {
     if (!current) return false
-    const fallback = projectContext.data.project.mainDir
+    const fallback = directoryData()?.findLast((item) => item.strategy === undefined)?.directory
     if (fallback) setReplacementCurrent(fallback)
     if (route.data.type === "session") {
       route.navigate({ type: "home" })
@@ -236,7 +235,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     const error = await client.api.projectCopy
       .remove({
         projectID: props.projectID,
-        location: { directory: projectContext.instance.directory() || paths.cwd },
+        location: { directory: location()?.directory || paths.cwd },
         directory: selected.directory,
         force: false,
       })
@@ -263,7 +262,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         const forcedError = await client.api.projectCopy
           .remove({
             projectID: props.projectID,
-            location: { directory: projectContext.instance.directory() || paths.cwd },
+            location: { directory: location()?.directory || paths.cwd },
             directory: selected.directory,
             force: true,
           })

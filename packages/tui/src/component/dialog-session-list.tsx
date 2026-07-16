@@ -5,14 +5,13 @@ import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useData } from "../context/data"
+import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
-import { useProject } from "../context/project"
 import { useTheme } from "../context/theme"
 import { useClient } from "../context/client"
 import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
-import { useCommandShortcut } from "../keymap"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
@@ -21,29 +20,27 @@ export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const project = useProject()
   const { theme } = useTheme()
   const client = useClient()
   const local = useLocal()
   const toast = useToast()
   const [filter, setFilter] = createSignal("")
+  const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
-  const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
-  const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
-  const deleteHint = useCommandShortcut("session.delete")
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query) return
-    const location = data.location.default()
     try {
+      if (!data.location.info()) await data.location.sync()
+      const current = data.location.info()
+      if (!current) throw new Error("Location unavailable")
       const response = await client.api.session.list({
+        project: current.project.id,
         search: query,
         limit: 50,
         order: "desc",
         parentID: null,
-        directory: location.directory,
-        workspace: location.workspaceID,
       })
       return { query, sessions: response.data, error: undefined }
     } catch (error) {
@@ -80,8 +77,8 @@ export function DialogSessionList() {
   })
 
   const quickSwitchHint = createMemo(() => {
-    const first = quickSwitch1()
-    const last = quickSwitch9()
+    const first = shortcuts.get("session.quick_switch.1")
+    const last = shortcuts.get("session.quick_switch.9")
     if (!first || !last) return
     return quickSwitchRange(first, last)
   })
@@ -103,11 +100,12 @@ export function DialogSessionList() {
 
     const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
-      const footer = directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
+      const footer =
+        directory !== data.location.info()?.project.directory ? Locale.truncate(path.basename(directory), 20) : ""
       const slot = slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {
-        title: deleting ? `Press ${deleteHint()} again to confirm` : session.title,
+        title: deleting ? `Press ${shortcuts.get("session.delete")} again to confirm` : session.title,
         value: session.id,
         category,
         footer,

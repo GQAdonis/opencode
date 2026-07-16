@@ -3,7 +3,9 @@ import {
   LLMClient,
   LLMError,
   LLMEvent,
+  Message,
   Model,
+  SystemPart,
   ToolFailure,
   TransportReason,
   InvalidProviderOutputReason,
@@ -11,8 +13,9 @@ import {
   RateLimitReason,
   type LLMClientShape,
   type LLMRequest,
-} from "@opencode-ai/llm"
-import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
+} from "@opencode-ai/ai"
+import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -20,6 +23,7 @@ import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
@@ -38,9 +42,10 @@ import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { SessionRunnerSystemPrompt } from "@opencode-ai/core/session/runner/system-prompt"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { QuestionTool } from "@opencode-ai/core/tool/question"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { AgentV2 } from "@opencode-ai/core/agent"
@@ -68,6 +73,8 @@ import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, S
 import { TestClock } from "effect/testing"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { agentHost, catalogHost, host } from "./plugin/host"
+import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
 
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
@@ -133,7 +140,7 @@ const reply = {
   ],
 }
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
-const defaultSystem = SessionRunnerSystemPrompt.provider(model)
+const defaultSystem = PROMPT_DEFAULT
 const replacementModel = Model.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
 const compactModel = Model.make({
   id: "compact",
@@ -354,6 +361,20 @@ const pluginSupervisor = Layer.succeed(
     flush: Effect.suspend(() => pluginFlushHook),
   }),
 )
+const promptCatalog = Layer.mock(Catalog.Service, {
+  provider: {
+    get: () => Effect.succeed(undefined),
+    all: () => Effect.succeed([]),
+    available: () => Effect.succeed([]),
+  },
+  model: {
+    get: () => Effect.succeed(undefined),
+    all: () => Effect.succeed([]),
+    available: () => Effect.succeed([]),
+    default: () => Effect.succeed(undefined),
+    small: () => Effect.succeed(undefined),
+  },
+})
 const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Snapshot.node, Snapshot.noopLayer],
   [LayerNodePlatform.llmClient, client],
@@ -394,8 +415,10 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       AgentV2.node,
+      Catalog.node,
       ToolRegistry.node,
       ToolRegistry.toolsNode,
+      PluginHooks.node,
       echoNode,
       SessionRunnerModel.node,
       InstructionBuiltIns.node,
@@ -412,6 +435,7 @@ const it = testEffect(
     [
       [LayerNodePlatform.llmClient, client],
       [PermissionV2.node, permission],
+      [Catalog.node, promptCatalog],
       [SessionRunnerModel.node, models],
       [InstructionBuiltIns.node, systemContext],
       [InstructionDiscovery.node, instructionContext],
@@ -450,6 +474,17 @@ const insertSession = (id: SessionV2.ID) =>
 
 const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
+  const agents = yield* AgentV2.Service
+  const catalog = yield* Catalog.Service
+  const hooks = yield* PluginHooks.Service
+  const pluginHost = host({
+    agent: agentHost(agents),
+    catalog: catalogHost(catalog),
+    session: { hook: (name, callback) => hooks.register("session", name, callback) },
+  })
+  yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
+    discard: true,
+  })
   requests.length = 0
   authorizations.length = 0
   executions.length = 0
@@ -473,7 +508,6 @@ const setup = Effect.gen(function* () {
   toolExecutionsReady = 5
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
-  const agents = yield* AgentV2.Service
   yield* agents.transform((draft) =>
     draft.update(AgentV2.ID.make("build"), (agent) => {
       agent.mode = "primary"
@@ -772,6 +806,32 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("applies session context hooks without exposing unavailable tools", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.system = [SystemPart.make("Hooked system")]
+          event.messages = [Message.user("Hooked message")]
+          delete event.tools.echo
+          event.tools.unregistered = { description: "Unavailable", input: { type: "object" } }
+        }),
+      )
+      yield* admit(session, "Original message")
+      responses = [reply.tool("call-removed", "echo", { text: "blocked" })]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.system.map((part) => part.text)).toEqual(["Hooked system"])
+      expect(requests[0]?.messages).toEqual([Message.user("Hooked message")])
+      expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
+      expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("unregistered")
+      expect(executions).toEqual([])
+    }),
+  )
+
   it.effect("advertises and executes a location registered tool", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -783,14 +843,22 @@ describe("SessionRunnerLLM", () => {
           input: Schema.Struct({ query: Schema.String }),
           output: Schema.Struct({ answer: Schema.String }),
           execute: ({ query }, context) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               contexts.push(context)
+              yield* context.progress({ structured: { phase: "reading" } })
               return { answer: query.toUpperCase() }
             }),
         }),
       }, { codemode: false })
       yield* admit(session, "Use application context")
       responses = [reply.tool("call-location", "location_context", { query: "hello" }), []]
+      const events = yield* EventV2.Service
+      const progressFiber = yield* events.subscribe(SessionEvent.Tool.Progress).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID && event.data.callID === "call-location"),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
 
       yield* session.resume(sessionID)
 
@@ -799,10 +867,12 @@ describe("SessionRunnerLLM", () => {
         {
           sessionID,
           agent: AgentV2.ID.make("build"),
-          assistantMessageID: expect.stringMatching(/^msg_/),
-          toolCallID: "call-location",
+          messageID: expect.stringMatching(/^msg_/),
+          callID: "call-location",
+          progress: expect.any(Function),
         },
       ])
+      expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.structured).toEqual({ phase: "reading" })
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use application context" },
         {
@@ -940,6 +1010,30 @@ describe("SessionRunnerLLM", () => {
         { role: "user", content: [{ type: "text", text: "Second" }] },
       ])
       expect(yield* session.messages({ sessionID })).toHaveLength(2)
+    }),
+  )
+
+  it.effect("marks the initial instruction sync as baseline metadata", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const events = yield* EventV2.Service
+      const instructionEvents: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === "session.instructions.updated") instructionEvents.push(event)
+        }),
+      )
+      yield* admit(session, "First")
+
+      yield* session.resume(sessionID)
+      systemBaseline = "Changed context"
+      yield* admit(session, "Second")
+      yield* session.resume(sessionID)
+      yield* unsubscribe
+
+      expect(instructionEvents).toHaveLength(2)
+      expect(instructionEvents[0]?.metadata).toEqual({ instructions: { initial: true } })
+      expect(instructionEvents[1]?.metadata).toBeUndefined()
     }),
   )
 
@@ -2228,7 +2322,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(authorizations).toMatchObject([{ sessionID, toolCallID: "call-echo" }])
+      expect(authorizations).toMatchObject([{ sessionID, callID: "call-echo" }])
       expect(executions).toEqual(["hello"])
       const context = yield* session.context(sessionID)
       expect(context).toMatchObject([
@@ -3052,10 +3146,32 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests[0]?.http?.headers).toEqual({
+        "x-session-affinity": sessionID,
+        "X-Session-Id": sessionID,
+        "User-Agent": `opencode/${InstallationVersion}`,
         "x-opencode-project": Project.ID.global,
         "x-opencode-session": sessionID,
         "x-opencode-client": Flag.OPENCODE_CLIENT,
       })
+    }),
+  )
+
+  it.effect("adds the parent session header to child model requests", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const parentID = SessionV2.ID.make("ses_runner_parent")
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ parent_id: parentID })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* admit(session, "Run child request")
+
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.http?.headers?.["x-parent-session-id"]).toBe(parentID)
     }),
   )
 
@@ -3851,6 +3967,32 @@ describe("SessionRunnerLLM", () => {
       yield* TestClock.adjust("1 millis")
       yield* Fiber.join(run)
       expect(requests).toHaveLength(2)
+    }),
+  )
+
+  it.effect("does not retry eligible failures after observable output", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Do not replay partial output")
+      const failure = rateLimited()
+      responseStream = Stream.fromIterable([
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "partial-rate-limit" }),
+        LLMEvent.textDelta({ id: "partial-rate-limit", text: "Partial" }),
+      ]).pipe(Stream.concat(Stream.fail(failure)))
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "provider.rate-limit" },
+          content: [{ type: "text", text: "Partial" }],
+        },
+      ])
     }),
   )
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.20",
+  "version": "1.18.2",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -87,7 +87,7 @@
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/cli": "workspace:*",
     "@opencode-ai/codemode": "workspace:*",
-    "@opencode-ai/llm": "workspace:*",
+    "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/schema": "workspace:*",

@@ -16,7 +16,6 @@ import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Reference } from "@opencode-ai/core/reference"
-import { SessionHooks } from "@opencode-ai/core/session/hooks"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { ToolHooks } from "@opencode-ai/core/tool/hooks"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
@@ -50,7 +49,6 @@ export const PluginTestLayer = AppNodeBuilder.build(
     PluginRuntime.node,
     PluginHooks.node,
     Reference.node,
-    SessionHooks.node,
     SkillV2.node,
     ToolHooks.node,
     ToolRegistry.toolsNode,
