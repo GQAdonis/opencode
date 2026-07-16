@@ -44,7 +44,9 @@
     {
       "id": "v2c-cleanup-and-integration-test",
       "status": "pending",
-      "outward": false
+      "outward": false,
+      "tasks_done": 3,
+      "tasks_total": 3
     },
     {
       "id": "v2c-pr-branches",
