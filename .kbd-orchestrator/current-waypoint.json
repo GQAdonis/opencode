@@ -1,11 +1,11 @@
 {
   "phase": "v2-upstream-contribution",
-  "status": "planned",
+  "status": "resynced-onto-upstream",
   "updatedAt": "2026-07-15T22:22:56Z",
   "branch": "v2",
-  "base": "upstream/v2@634386fe0f",
+  "base": "upstream/v2@7624c4f7b3 (merged)",
   "change_backend": "openspec",
-  "next_action": "/kbd-apply v2c-cleanup-and-integration-test",
+  "next_action": "Decide: (a) contribute PR B ($defs->packages/ai) + PR C (model-persistence), and/or (b) reharness the ranking integration test",
   "next_change": null,
   "implementationCompleted": 0,
   "implementationTotal": 4,
@@ -45,5 +45,24 @@
   "certificationStatus": "NOT_TRACKED",
   "publicationStatus": "NOT_TRACKED",
   "changesCompleted": 0,
-  "changesTotal": 0
+  "changesTotal": 0,
+  "pivot": {
+    "trigger": "upstream/v2 moved 58 commits mid-phase and SHIPPED session.hook('context') themselves",
+    "principle": "upstream is boss \u2014 defer to upstream unless a critical fork-only need (e.g. skill selection)",
+    "done_this_turn": [
+      "Merged upstream/v2 (58 commits) into v2 branch",
+      "Deleted our session-hook implementation (core/session/hooks.ts + test); adopted upstream's session.hook('context') entirely",
+      "Rebuilt fork.skill-ranking plugin on upstream's shape (SystemPart[]/Message[]/event 'context')",
+      "llm package renamed to ai upstream (affects PR B target path)"
+    ],
+    "PR_status": {
+      "A_session_hook": "DEAD \u2014 upstream shipped it",
+      "B_defs_inlining": "still valid; retarget packages/llm -> packages/ai; bug still present",
+      "C_model_persistence": "still valid; local.tsx untouched upstream"
+    },
+    "follow_ups": [
+      "Reharness ranking integration test against upstream's generic PluginHooks (old one drove our deleted service)",
+      "Upstream's packages/ai/src/route/transport/websocket.ts:206 has a pre-existing TextDecoder-as-type tsgo error (not ours)"
+    ]
+  }
 }
